@@ -1,13 +1,14 @@
-# Backend Service
+# WebShop Micro-Frontend Backend Service
 
-This is the backend service for the Micro-Frontend Webshop project. It provides the API endpoints for the micro-frontends to consume.
+This is the backend service for the WebShop Micro-Frontend application, featuring a RESTful API and WebSocket server for real-time communication between micro-frontends.
 
 ## Overview
 
-The backend service is responsible for:
-- Providing product data through REST API endpoints
-- Handling cross-origin requests from micro-frontends
-- (Future) Persisting data to a database
+The backend service provides:
+
+1. **RESTful API**: For product and shopping cart operations
+2. **WebSocket Server**: For real-time updates across all micro-frontends
+3. **In-Memory Data Store**: Simulates a database for products and cart items
 
 ## Technical Details
 
@@ -341,34 +342,270 @@ DELETE http://localhost:3000/api/cart
 }
 ```
 
-## Integration with Micro-Frontends
+## WebSocket Implementation
 
-The backend service provides the data layer for the micro-frontend architecture:
+The WebSocket implementation enables real-time synchronization across all micro-frontends, ensuring that changes made in one micro-frontend are instantly reflected in others without requiring polling or page refreshes.
 
-1. **Product Listing Micro-Frontend**: Fetches the list of products via the `/api/products` endpoint and adds products to the cart
-2. **Shopping Cart Micro-Frontend**: Manages the cart via the cart endpoints
-3. **Shell Application**: Coordinates between micro-frontends and displays cart count
+### Architecture
 
-The cart implementation demonstrates a real-time update pattern using:
-- REST API for data persistence
-- Custom browser events for cross-micro-frontend communication
-- Optimistic UI updates for a responsive user experience
+The WebSocket implementation follows a publisher-subscriber pattern:
 
-## Performance Considerations
+1. **Server (Publisher)**: Broadcasts cart updates to all connected clients
+2. **Clients (Subscribers)**: Listen for updates and react accordingly
 
-- **Response Time**: The current in-memory implementation is extremely fast
-- **Caching**: No caching is implemented yet, but would be important for production
-- **Payload Size**: Product responses include minimal necessary data to keep payloads small
+```
+┌─────────────────┐     Cart Updates     ┌─────────────────┐
+│                 │───────────────────▶│                 │
+│   Backend       │                     │   Shell         │
+│   Server        │◀───────────────────│   Application    │
+│   (WebSocket)   │   Connect/Subscribe │                 │
+└─────────────────┘                     └─────────────────┘
+          ▲                                     ▲
+          │                                     │
+          │                                     │
+          │                                     │
+          │                                     │
+          │                                     │
+          │                                     │
+          ▼                                     ▼
+┌─────────────────┐                     ┌─────────────────┐
+│                 │                     │                 │
+│   Shopping Cart │                     │   Product       │
+│   Micro-Frontend│◀───────────────────▶│   Listing       │
+│                 │   Real-time updates │   Micro-Frontend│
+└─────────────────┘   synchronized      └─────────────────┘
+```
+
+### Technical Implementation
+
+#### Server-Side
+
+The WebSocket server is implemented using the `ws` library and is attached to the same HTTP server that hosts the REST API:
+
+```javascript
+const { WebSocketServer } = require('ws');
+const http = require('http');
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
+```
+
+#### Connection Handling
+
+When a client connects to the WebSocket server:
+
+1. The connection is established
+2. The current cart state is immediately sent to the new client
+3. Event listeners are set up for further communication
+
+```javascript
+wss.on('connection', (ws) => {
+  console.log('Client connected to WebSocket');
+  
+  // Send current cart to new connections
+  ws.send(JSON.stringify({ type: 'CART_UPDATE', data: cart }));
+  
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message);
+      console.log('Received WebSocket message:', data);
+      
+      // Handle different message types
+      if (data.type === 'CART_REQUEST') {
+        ws.send(JSON.stringify({ type: 'CART_UPDATE', data: cart }));
+      }
+    } catch (err) {
+      console.error('Error processing WebSocket message:', err);
+    }
+  });
+  
+  ws.on('close', () => {
+    console.log('Client disconnected from WebSocket');
+  });
+});
+```
+
+#### Broadcasting Updates
+
+The server broadcasts cart updates to all connected clients through the `broadcastCartUpdate` function:
+
+```javascript
+const broadcastCartUpdate = () => {
+  wss.clients.forEach(client => {
+    if (client.readyState === 1) { // WebSocket.OPEN
+      client.send(JSON.stringify({ type: 'CART_UPDATE', data: cart }));
+    }
+  });
+};
+```
+
+This function is called after every cart modification operation:
+- Adding items to cart
+- Updating item quantities
+- Removing items from cart
+- Clearing the entire cart
+
+### Client-Side Implementation
+
+Micro-frontends connect to the WebSocket server and listen for updates:
+
+```javascript
+// Inside the ShoppingCart component
+const wsRef = ref(null);
+
+onMounted(() => {
+  // Establish WebSocket connection
+  wsRef.value = new WebSocket('ws://localhost:3000');
+  
+  // Set up message handler
+  wsRef.value.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === 'CART_UPDATE') {
+      // Update local cart state with the received data
+      cart.value = data.data;
+    }
+  };
+  
+  // Handle connection open
+  wsRef.value.onopen = () => {
+    console.log('WebSocket connection established');
+    // Request initial cart data
+    wsRef.value.send(JSON.stringify({ type: 'CART_REQUEST' }));
+  };
+  
+  // Handle errors
+  wsRef.value.onerror = (error) => {
+    console.error('WebSocket error:', error);
+  };
+});
+
+// Clean up on component unmount
+onBeforeUnmount(() => {
+  if (wsRef.value && wsRef.value.readyState === WebSocket.OPEN) {
+    wsRef.value.close();
+  }
+});
+```
+
+### Message Format
+
+All WebSocket messages follow a standardized JSON format:
+
+```javascript
+{
+  "type": "MESSAGE_TYPE",  // e.g., "CART_UPDATE", "CART_REQUEST"
+  "data": {                // Payload, varies by message type
+    // For CART_UPDATE, this contains the entire cart array
+  }
+}
+```
+
+## Benefits for Micro-Frontend Architecture
+
+### 1. Real-Time Synchronization
+
+The WebSocket implementation provides real-time synchronization between independently deployed micro-frontends, maintaining a consistent user experience despite the distributed nature of the application.
+
+### 2. Loose Coupling
+
+Micro-frontends remain decoupled from each other, communicating indirectly through the WebSocket server rather than direct dependencies.
+
+### 3. Improved Performance
+
+By pushing updates to clients rather than relying on polling, the WebSocket implementation:
+- Reduces network overhead
+- Minimizes latency in displaying updated cart information
+- Eliminates the need for periodic API calls
+
+### 4. Enhanced User Experience
+
+Users see cart updates immediately across all parts of the application, creating a seamless shopping experience even though they're interacting with separate micro-frontends.
+
+### 5. Scalability
+
+The WebSocket architecture facilitates:
+- Easy addition of new micro-frontends that can tap into the same real-time update system
+- Potential for segregating WebSocket connections by topic/domain for larger applications
+- Future expansion to other real-time features like inventory updates or user notifications
+
+## Integration with RESTful API
+
+The WebSocket server complements the RESTful API rather than replacing it:
+
+1. **RESTful API**: Handles CRUD operations and serves as the source of truth
+2. **WebSocket Server**: Distributes updates after successful API operations
+
+This hybrid approach maintains the benefits of both communication paradigms:
+- RESTful API for standard operations with well-defined semantics
+- WebSockets for pushing real-time updates to all connected clients
+
+Example of REST and WebSocket coordination in the cart update endpoint:
+
+```javascript
+// Update cart item
+app.put('/api/cart/:id', (req, res) => {
+  const id = parseInt(req.params.id);
+  const { quantity } = req.body;
+  
+  if (quantity === undefined) {
+    return res.status(400).json({ error: 'Quantity is required' });
+  }
+  
+  const itemIndex = cart.findIndex(item => item.id === id);
+  
+  if (itemIndex === -1) {
+    return res.status(404).json({ error: 'Cart item not found' });
+  }
+  
+  if (quantity <= 0) {
+    // Remove item if quantity is 0 or less
+    cart.splice(itemIndex, 1);
+  } else {
+    // Update quantity
+    cart[itemIndex].quantity = quantity;
+  }
+  
+  // Broadcast the cart update to all connected clients via WebSocket
+  broadcastCartUpdate();
+  
+  // Respond to the original REST request
+  res.json({ message: 'Cart updated', cart });
+});
+```
+
+## Testing WebSocket Functionality
+
+You can test the WebSocket functionality using browser developer tools or specialized tools:
+
+1. Using the Browser Console:
+```javascript
+// Connect to WebSocket server
+const ws = new WebSocket('ws://localhost:3000');
+
+// Set up event listeners
+ws.onopen = () => console.log('Connected');
+ws.onmessage = (event) => console.log('Received:', JSON.parse(event.data));
+
+// Request cart data
+ws.send(JSON.stringify({ type: 'CART_REQUEST' }));
+```
+
+2. Using WebSocket testing tools like Postman or websocat.
 
 ## Security Considerations
 
-For a production-ready implementation, consider adding:
+In a production environment, the WebSocket implementation should include:
 
-1. **Rate Limiting**: Prevent abuse with request rate limits
-2. **Input Validation**: Validate all incoming request parameters
-3. **CORS Restrictions**: Limit allowed origins
-4. **Authentication/Authorization**: Add user authentication for protected resources
-5. **HTTPS**: Secure data transmission
+1. **Authentication**: Verifying user identity before establishing WebSocket connections
+2. **Authorization**: Ensuring users only receive updates for their own cart
+3. **Message validation**: Preventing malicious or malformed messages
+4. **Rate limiting**: Protecting against denial-of-service attacks
+5. **HTTPS/WSS**: Using secure WebSocket connections
+
+## Conclusion
+
+The WebSocket implementation significantly enhances the micro-frontend architecture by providing real-time synchronization capabilities. It maintains the loose coupling principle while ensuring a consistent user experience across all components of the application.
+
+The hybrid approach of RESTful API + WebSocket communication represents a modern, efficient architecture for web applications requiring real-time updates and collaboration features.
 
 ## Key Files
 

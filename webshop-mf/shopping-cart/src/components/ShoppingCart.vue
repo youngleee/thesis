@@ -2,6 +2,10 @@
   <div class="shopping-cart">
     <div class="cart-header">
       <h2>Your Shopping Cart</h2>
+      <div class="connection-status" :class="{ connected: isConnected }">
+        <span class="status-indicator"></span>
+        <span class="status-text">{{ isConnected ? 'Live Updates' : 'Offline' }}</span>
+      </div>
     </div>
     <div v-if="loading" class="loading">
       <div class="spinner"></div>
@@ -10,6 +14,7 @@
     <div v-else-if="error" class="error-message">
       <i class="error-icon">⚠️</i>
       <p>Error loading cart: {{ error }}</p>
+      <button v-if="wsError" @click="reconnectWebSocket" class="retry-button">Reconnect</button>
     </div>
     <div v-else-if="cart.length === 0" class="empty-cart">
       <div class="empty-cart-icon">🛒</div>
@@ -27,11 +32,18 @@
         </div>
         <div class="item-controls">
           <div class="quantity-controls">
-            <button class="quantity-btn decrease" @click="updateQuantity(item.id, item.quantity - 1)" :disabled="item.quantity <= 1">
+            <button 
+              @click="updateQuantity(item.id, item.quantity - 1)" 
+              class="quantity-btn decrease"
+              :disabled="item.quantity <= 1"
+            >
               <span>-</span>
             </button>
             <span class="quantity">{{ item.quantity }}</span>
-            <button class="quantity-btn increase" @click="updateQuantity(item.id, item.quantity + 1)">
+            <button 
+              @click="updateQuantity(item.id, item.quantity + 1)"
+              class="quantity-btn increase"
+            >
               <span>+</span>
             </button>
           </div>
@@ -83,14 +95,21 @@ export default {
     const cart = ref([]);
     const loading = ref(true);
     const error = ref(null);
-
+    const wsRef = ref(null);
+    const isConnected = ref(false);
+    const wsError = ref(false);
+    const reconnectAttempts = ref(0);
+    const maxReconnectAttempts = 5;
+    
     const totalPrice = computed(() => {
       return cart.value.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     });
 
+    // Fetch cart data from REST API (fallback method)
     const fetchCart = async () => {
       try {
         loading.value = true;
+        error.value = null;
         const response = await axios.get('http://localhost:3000/api/cart');
         cart.value = response.data;
       } catch (err) {
@@ -100,55 +119,69 @@ export default {
       }
     };
 
+    // Update item quantity
     const updateQuantity = async (id, newQuantity) => {
       if (newQuantity < 1) return;
       
       try {
         await axios.put(`http://localhost:3000/api/cart/${id}`, { quantity: newQuantity });
-        // Update local state
+        
+        // Optimistically update the UI (will be overwritten by WebSocket update)
         const itemIndex = cart.value.findIndex(item => item.id === id);
         if (itemIndex !== -1) {
           cart.value[itemIndex].quantity = newQuantity;
         }
         
-        // Dispatch event to notify other components
+        // Also dispatch event for components that don't use WebSockets yet
         window.dispatchEvent(new CustomEvent('cart-updated', { 
           detail: { action: 'update', productId: id, quantity: newQuantity }
         }));
       } catch (err) {
         error.value = `Error updating quantity: ${err.message}`;
+        // Revert optimistic update on error
+        fetchCart();
       }
     };
 
+    // Remove item from cart
     const removeFromCart = async (id) => {
       try {
         await axios.delete(`http://localhost:3000/api/cart/${id}`);
-        // Update local state
+        
+        // Optimistically update the UI (will be overwritten by WebSocket update)
         cart.value = cart.value.filter(item => item.id !== id);
         
-        // Dispatch event to notify other components
+        // Also dispatch event for components that don't use WebSockets yet
         window.dispatchEvent(new CustomEvent('cart-updated', { 
           detail: { action: 'remove', productId: id }
         }));
       } catch (err) {
         error.value = `Error removing item: ${err.message}`;
+        // Revert optimistic update on error
+        fetchCart();
       }
     };
 
+    // Clear entire cart
     const clearCart = async () => {
       try {
         await axios.delete('http://localhost:3000/api/cart');
+        
+        // Optimistically update the UI (will be overwritten by WebSocket update)
         cart.value = [];
         
-        // Dispatch event to notify other components
+        // Also dispatch event for components that don't use WebSockets yet
         window.dispatchEvent(new CustomEvent('cart-updated', { 
           detail: { action: 'clear' }
         }));
       } catch (err) {
         error.value = `Error clearing cart: ${err.message}`;
+        // Revert optimistic update on error
+        fetchCart();
       }
     };
     
+    // Navigate to product listing
     const navigateToProductList = () => {
       // For standalone mode, redirect to product listing port
       if (!window.__POWERED_BY_FEDERATION__) {
@@ -161,33 +194,122 @@ export default {
       }
     };
 
-    // Handle cart update events from other micro-frontends
-    const handleCartUpdate = (event) => {
-      console.log('Cart update event received:', event.detail);
-      fetchCart();
+    // Set up WebSocket connection
+    const setupWebSocket = () => {
+      // Close existing connection if any
+      if (wsRef.value && wsRef.value.readyState !== WebSocket.CLOSED) {
+        wsRef.value.close();
+      }
+      
+      // Create new WebSocket connection
+      wsRef.value = new WebSocket('ws://localhost:3000');
+      
+      // Handle connection open
+      wsRef.value.onopen = () => {
+        console.log('WebSocket connection established');
+        isConnected.value = true;
+        wsError.value = false;
+        reconnectAttempts.value = 0;
+        
+        // Request initial cart data
+        wsRef.value.send(JSON.stringify({ type: 'CART_REQUEST' }));
+      };
+      
+      // Handle messages from server
+      wsRef.value.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('WebSocket message received:', data);
+          
+          if (data.type === 'CART_UPDATE') {
+            cart.value = data.data;
+            loading.value = false;
+          }
+        } catch (err) {
+          console.error('Error processing WebSocket message:', err);
+        }
+      };
+      
+      // Handle connection close
+      wsRef.value.onclose = (event) => {
+        console.log('WebSocket connection closed:', event.code, event.reason);
+        isConnected.value = false;
+        
+        // Attempt reconnection if not closing intentionally
+        if (!event.wasClean && reconnectAttempts.value < maxReconnectAttempts) {
+          reconnectAttempts.value += 1;
+          const delay = Math.min(1000 * 2 ** reconnectAttempts.value, 30000);
+          console.log(`Attempting to reconnect in ${delay}ms (attempt ${reconnectAttempts.value}/${maxReconnectAttempts})`);
+          
+          setTimeout(setupWebSocket, delay);
+        } else if (reconnectAttempts.value >= maxReconnectAttempts) {
+          wsError.value = true;
+          error.value = "WebSocket connection failed. Please try again later.";
+        }
+      };
+      
+      // Handle errors
+      wsRef.value.onerror = (err) => {
+        console.error('WebSocket error:', err);
+        wsError.value = true;
+        
+        // Fallback to REST API if WebSocket fails
+        if (loading.value) {
+          fetchCart();
+        }
+      };
+    };
+    
+    // Manually reconnect WebSocket
+    const reconnectWebSocket = () => {
+      reconnectAttempts.value = 0;
+      wsError.value = false;
+      error.value = null;
+      loading.value = true;
+      setupWebSocket();
     };
 
+    // Initialize component
     onMounted(() => {
-      fetchCart();
+      console.log('Shopping Cart component mounted');
       
-      // Listen for cart update events
-      window.addEventListener('cart-updated', handleCartUpdate);
+      // Set up WebSocket connection
+      setupWebSocket();
+      
+      // Fallback: Listen for cart update events (for backward compatibility)
+      window.addEventListener('cart-updated', (event) => {
+        console.log('Cart update event received:', event.detail);
+        // If we're not connected via WebSocket, update from the event
+        if (!isConnected.value) {
+          fetchCart();
+        }
+      });
     });
     
-    // Clean up event listeners when component is unmounted
+    // Clean up on component unmount
     onBeforeUnmount(() => {
-      window.removeEventListener('cart-updated', handleCartUpdate);
+      // Close WebSocket connection
+      if (wsRef.value) {
+        wsRef.value.close();
+        wsRef.value = null;
+      }
+      
+      // Remove event listeners
+      window.removeEventListener('cart-updated', () => {});
     });
 
     return {
       cart,
       loading,
       error,
+      wsError,
+      isConnected,
       totalPrice,
       updateQuantity,
       removeFromCart,
       clearCart,
-      navigateToProductList
+      navigateToProductList,
+      reconnectWebSocket
     };
   }
 };
@@ -208,6 +330,9 @@ export default {
   margin-bottom: 25px;
   border-bottom: 2px solid #f5f5f5;
   padding-bottom: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 h2 {
@@ -216,6 +341,29 @@ h2 {
   font-size: 1.8rem;
   font-weight: 600;
   text-align: left;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  font-size: 0.85rem;
+  color: #64748b;
+  gap: 5px;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #ef4444;
+}
+
+.connection-status.connected .status-indicator {
+  background-color: #10b981;
+}
+
+.connection-status.connected {
+  color: #10b981;
 }
 
 .cart-items {
@@ -542,6 +690,22 @@ h2 {
   margin-bottom: 15px;
 }
 
+.retry-button {
+  margin-top: 15px;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.retry-button:hover {
+  background-color: #2563eb;
+}
+
 @media (max-width: 768px) {
   .cart-item {
     flex-direction: column;
@@ -580,6 +744,16 @@ h2 {
   
   .remove-btn {
     order: 3;
+  }
+  
+  .cart-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  
+  .connection-status {
+    align-self: flex-end;
   }
 }
 

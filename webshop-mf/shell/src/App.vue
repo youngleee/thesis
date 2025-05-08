@@ -160,6 +160,8 @@ export default {
     const cartItemCount = ref(0)
     const searchQuery = ref('')
     const selectedProductId = ref(null)
+    const wsRef = ref(null)
+    const wsConnected = ref(false)
     
     // Handle window resize
     const handleResize = () => {
@@ -210,14 +212,60 @@ export default {
       }
     }
     
-    // Handle cart update events from micro-frontends
+    // Handle cart update events from micro-frontends (legacy support)
     const handleCartUpdate = (event) => {
       console.log('Cart update event received in shell:', event.detail)
-      // Immediately update the cart count instead of waiting for the next poll
-      updateCartCount()
+      // Only use if WebSocket is not connected
+      if (!wsConnected.value) {
+        updateCartCount()
+      }
     }
     
-    // Update cart count - in a real app, this would come from a shared state or API
+    // Set up WebSocket connection
+    const setupWebSocket = () => {
+      // Close existing connection if any
+      if (wsRef.value && wsRef.value.readyState !== WebSocket.CLOSED) {
+        wsRef.value.close()
+      }
+      
+      wsRef.value = new WebSocket('ws://localhost:3000')
+      
+      wsRef.value.onopen = () => {
+        console.log('Shell: WebSocket connection established')
+        wsConnected.value = true
+      }
+      
+      wsRef.value.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          
+          if (data.type === 'CART_UPDATE') {
+            console.log('Shell: WebSocket cart update received', data.data.length)
+            cartItemCount.value = data.data.length || 0
+          }
+        } catch (err) {
+          console.error('Shell: Error processing WebSocket message:', err)
+        }
+      }
+      
+      wsRef.value.onclose = (event) => {
+        console.log('Shell: WebSocket connection closed', event.code, event.reason)
+        wsConnected.value = false
+        
+        // Fall back to polling if WebSocket fails
+        if (!event.wasClean) {
+          console.log('Shell: Falling back to polling for cart updates')
+          startCartPolling()
+        }
+      }
+      
+      wsRef.value.onerror = (err) => {
+        console.error('Shell: WebSocket error:', err)
+        wsConnected.value = false
+      }
+    }
+    
+    // Update cart count from REST API (fallback)
     const updateCartCount = async () => {
       try {
         const response = await fetch('http://localhost:3000/api/cart')
@@ -227,6 +275,31 @@ export default {
       } catch (err) {
         console.error('Error fetching cart data:', err)
         cartItemCount.value = 0
+      }
+    }
+    
+    // Polling interval reference
+    let cartInterval = null
+    
+    // Start cart polling (fallback mechanism)
+    const startCartPolling = () => {
+      // Clear existing interval if any
+      if (cartInterval) {
+        clearInterval(cartInterval)
+      }
+      
+      // Initial fetch
+      updateCartCount()
+      
+      // Set up polling
+      cartInterval = setInterval(updateCartCount, 5000)
+    }
+    
+    // Stop cart polling
+    const stopCartPolling = () => {
+      if (cartInterval) {
+        clearInterval(cartInterval)
+        cartInterval = null
       }
     }
     
@@ -257,20 +330,29 @@ export default {
       window.addEventListener('navigate', handleNavigation)
       window.addEventListener('cart-updated', handleCartUpdate)
       window.addEventListener('popstate', initFromUrl)
+      window.addEventListener('clear-search', () => {
+        searchQuery.value = ''
+      })
       
-      // Initialize cart count
-      updateCartCount()
+      // Set up WebSocket connection
+      setupWebSocket()
       
-      // Set up polling for cart updates (every 5 seconds)
-      const cartInterval = setInterval(updateCartCount, 5000)
-      
-      // Clean up interval on component unmount
+      // Clean up on component unmount
       onBeforeUnmount(() => {
-        clearInterval(cartInterval)
+        stopCartPolling()
+        
+        // Close WebSocket connection
+        if (wsRef.value) {
+          wsRef.value.close()
+          wsRef.value = null
+        }
+        
+        // Remove event listeners
         window.removeEventListener('resize', handleResize)
         window.removeEventListener('navigate', handleNavigation)
         window.removeEventListener('cart-updated', handleCartUpdate)
         window.removeEventListener('popstate', initFromUrl)
+        window.removeEventListener('clear-search', () => {})
       })
     })
     
@@ -284,7 +366,8 @@ export default {
       navigateTo,
       searchQuery,
       performSearch,
-      selectedProductId
+      selectedProductId,
+      wsConnected
     }
   },
   components: {

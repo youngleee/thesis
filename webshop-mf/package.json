@@ -1,0 +1,24 @@
+{
+  "name": "webshop-mf",
+  "version": "1.0.0",
+  "description": "WebShop Micro-Frontend Demo with WebSocket Integration",
+  "scripts": {
+    "install-all": "npm install && npm run install-backend && npm run install-shell && npm run install-product-listing && npm run install-product-details && npm run install-shopping-cart",
+    "install-backend": "cd backend && npm install",
+    "install-shell": "cd shell && npm install",
+    "install-product-listing": "cd product-listing && npm install",
+    "install-product-details": "cd product-details && npm install", 
+    "install-shopping-cart": "cd shopping-cart && npm install",
+    "start-all": "concurrently \"npm run start-backend\" \"npm run start-shell\" \"npm run start-product-listing\" \"npm run start-product-details\" \"npm run start-shopping-cart\"",
+    "start-backend": "cd backend && npm run dev",
+    "start-shell": "cd shell && npm run serve",
+    "start-product-listing": "cd product-listing && npm run serve",
+    "start-product-details": "cd product-details && npm run serve",
+    "start-shopping-cart": "cd shopping-cart && npm run serve"
+  },
+  "devDependencies": {
+    "concurrently": "^7.6.0"
+  },
+  "author": "",
+  "license": "MIT"
+} 
