@@ -118,6 +118,25 @@
             </template>
           </Suspense>
         </div>
+        
+        <!-- Product Details MFE -->
+        <div v-if="currentView === 'product-details'" class="product-details-container">
+          <Suspense>
+            <template #default>
+              <RemoteProductDetails v-if="isProductDetailsLoaded" :productId="selectedProductId" />
+              <div v-else class="loading-container">
+                <div class="loading-spinner"></div>
+                <p>Loading Product Details...</p>
+              </div>
+            </template>
+            <template #fallback>
+              <div class="loading-container">
+                <div class="loading-spinner"></div>
+                <p>Loading product details component...</p>
+              </div>
+            </template>
+          </Suspense>
+        </div>
       </div>
     </main>
     
@@ -135,10 +154,12 @@ export default {
   setup() {
     const isProductListingLoaded = ref(false)
     const isShoppingCartLoaded = ref(false)
+    const isProductDetailsLoaded = ref(false)
     const currentView = ref('products')
     const isDesktopView = ref(window.innerWidth >= 800)
     const cartItemCount = ref(0)
     const searchQuery = ref('')
+    const selectedProductId = ref(null)
     
     // Handle window resize
     const handleResize = () => {
@@ -146,9 +167,19 @@ export default {
     }
     
     // Enhanced navigation function
-    const navigateTo = (view) => {
-      console.log(`Navigation clicked: ${view}`)
+    const navigateTo = (view, params) => {
+      console.log(`Navigation clicked: ${view}`, params)
       currentView.value = view
+      
+      if (view === 'product-details' && params && params.productId) {
+        selectedProductId.value = params.productId
+        
+        // Update URL to reflect the product being viewed
+        const url = new URL(window.location)
+        url.searchParams.set('view', 'product-details')
+        url.searchParams.set('id', params.productId)
+        window.history.pushState({}, '', url)
+      }
     }
     
     // Search function
@@ -170,9 +201,11 @@ export default {
       console.log('Navigation event received:', event.detail)
       if (event.detail && event.detail.path) {
         if (event.detail.path === '/products') {
-          currentView.value = 'products'
+          navigateTo('products')
         } else if (event.detail.path === '/cart') {
-          currentView.value = 'cart'
+          navigateTo('cart')
+        } else if (event.detail.path === '/product-details' && event.detail.productId) {
+          navigateTo('product-details', { productId: event.detail.productId })
         }
       }
     }
@@ -197,16 +230,33 @@ export default {
       }
     }
     
+    // Check URL for initial view and product ID
+    const initFromUrl = () => {
+      const urlParams = new URLSearchParams(window.location.search)
+      const viewParam = urlParams.get('view')
+      const productIdParam = urlParams.get('id')
+      
+      if (viewParam === 'product-details' && productIdParam) {
+        selectedProductId.value = productIdParam
+        currentView.value = 'product-details'
+      }
+    }
+    
     onMounted(() => {
       console.log('Shell application mounted')
       // Set these to true once the remotes are loaded
       isProductListingLoaded.value = true
       isShoppingCartLoaded.value = true
+      isProductDetailsLoaded.value = true
+      
+      // Initialize view from URL if applicable
+      initFromUrl()
       
       // Add event listeners
       window.addEventListener('resize', handleResize)
       window.addEventListener('navigate', handleNavigation)
       window.addEventListener('cart-updated', handleCartUpdate)
+      window.addEventListener('popstate', initFromUrl)
       
       // Initialize cart count
       updateCartCount()
@@ -220,18 +270,21 @@ export default {
         window.removeEventListener('resize', handleResize)
         window.removeEventListener('navigate', handleNavigation)
         window.removeEventListener('cart-updated', handleCartUpdate)
+        window.removeEventListener('popstate', initFromUrl)
       })
     })
     
     return {
       isProductListingLoaded,
       isShoppingCartLoaded,
+      isProductDetailsLoaded,
       currentView,
       isDesktopView,
       cartItemCount,
       navigateTo,
       searchQuery,
-      performSearch
+      performSearch,
+      selectedProductId
     }
   },
   components: {
@@ -254,6 +307,26 @@ export default {
                 <h2>Shopping Cart</h2>
                 <div class="error-message">
                   <p>Sorry, we couldn't load the shopping cart component.</p>
+                  <p>Please try refreshing the page.</p>
+                </div>
+              </div>
+            `,
+            setup() {
+              return {}
+            }
+          }
+        })
+    ),
+    RemoteProductDetails: defineAsyncComponent(() => 
+      import('productDetails/ProductDetails')
+        .catch(err => {
+          console.error('Error loading product details component:', err)
+          return {
+            template: `
+              <div class="fallback-product-details">
+                <h2>Product Details</h2>
+                <div class="error-message">
+                  <p>Sorry, we couldn't load the product details component.</p>
                   <p>Please try refreshing the page.</p>
                 </div>
               </div>
@@ -523,4 +596,21 @@ footer {
     font-size: 0.9rem;
   }
 }
+
+/* Additional styles for product details */
+.product-details-container {
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  min-height: 200px;
+}
+
+.fallback-product-details {
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
 </style>

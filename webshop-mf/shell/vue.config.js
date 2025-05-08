@@ -15,6 +15,7 @@ module.exports = defineConfig({
         remotes: {
           productListing: 'productListing@http://localhost:8081/remoteEntry.js',
           shoppingCart: 'shoppingCart@http://localhost:8083/remoteEntry.js',
+          productDetails: 'productDetails@http://localhost:8084/remoteEntry.js',
         },
         shared: {
           vue: {
