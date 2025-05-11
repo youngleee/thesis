@@ -1,9 +1,25 @@
 <template>
   <div class="product-list-container">
-    <!-- Search results info -->
-    <div v-if="searchTerm" class="search-results-info">
-      <p>{{ filteredProducts.length }} results for "{{ searchTerm }}"</p>
-      <button @click="clearSearch" class="clear-search-button">Clear Search</button>
+    <!-- Toast notification for added products -->
+    <div v-if="showToast" class="toast-notification" :class="{ 'show': showToast }">
+      <div class="toast-content">
+        <span class="toast-icon">✓</span>
+        <span class="toast-message">{{toastMessage}}</span>
+      </div>
+    </div>
+
+    <!-- Header with search results and cart button -->
+    <div class="product-list-header">
+      <div v-if="searchTerm" class="search-results-info">
+        <p>{{ filteredProducts.length }} results for "{{ searchTerm }}"</p>
+        <button @click="clearSearch" class="clear-search-button">Clear Search</button>
+      </div>
+
+      <button @click="viewCart" class="view-cart-button">
+        <span class="cart-icon">🛒</span>
+        <span v-if="cartItemCount > 0" class="cart-count">{{ cartItemCount }}</span>
+        View Cart
+      </button>
     </div>
 
     <!-- No results message -->
@@ -15,7 +31,12 @@
     
     <!-- Product grid -->
     <div v-else class="product-grid">
-      <div v-for="product in filteredProducts" :key="product.id" class="product-card" @click="navigateToProductDetails(product.id)">
+      <!-- Animation element for cart addition -->
+      <div v-if="animatingProduct" class="cart-animation" :style="animationStyle">
+        <div class="cart-animation-icon">🛒</div>
+      </div>
+
+      <div v-for="product in filteredProducts" :key="product.id" class="product-card" :class="{ 'highlight-animation': product.isHighlighted }" @click="navigateToProductDetails(product.id)">
         <div class="product-image-container">
           <img :src="product.image" :alt="product.name" class="product-image" />
         </div>
@@ -24,8 +45,8 @@
           <p class="product-price">${{ product.price.toFixed(2) }}</p>
           <p class="product-description">{{ product.description }}</p>
         </div>
-        <button @click.stop="addToCart(product)" class="add-to-cart-button">
-          Add to Cart
+        <button @click.stop="addToCart(product, $event)" class="add-to-cart-button" :class="{ 'added': product.isAddedAnimation }">
+          {{ product.isAddedAnimation ? 'Added! ✓' : 'Add to Cart' }}
         </button>
       </div>
     </div>
@@ -33,7 +54,7 @@
 </template>
 
 <script>
-import { ref, onMounted, reactive, watch } from 'vue'
+import { ref, onMounted, reactive, watch, onUnmounted } from 'vue'
 
 export default {
   name: 'ProductList',
@@ -48,6 +69,11 @@ export default {
     const filteredProducts = ref([])
     const error = ref(null)
     const loading = ref(true)
+    const cartItemCount = ref(0)
+    const showToast = ref(false)
+    const toastMessage = ref('')
+    const animatingProduct = ref(null)
+    const animationStyle = ref({})
     
     // Reactive state for API requests
     const apiState = reactive({
@@ -55,6 +81,18 @@ export default {
       maxRetries: 3,
       backoffTime: 1000, // Starting backoff time in ms
     })
+    
+    // Define cleanup function that will be assigned later
+    let searchEventHandler
+    let cartUpdatedHandler
+    const cleanup = () => {
+      if (searchEventHandler) {
+        window.removeEventListener('search', searchEventHandler)
+      }
+      if (cartUpdatedHandler) {
+        window.removeEventListener('cart-updated', cartUpdatedHandler)
+      }
+    }
     
     // Function to filter products based on search term
     const filterProducts = () => {
@@ -95,6 +133,13 @@ export default {
         }
         
         products.value = await response.json()
+        
+        // Add animation properties to each product
+        products.value.forEach(product => {
+          product.isAddedAnimation = false
+          product.isHighlighted = false
+        })
+        
         filteredProducts.value = [...products.value] // Initialize filtered products
         
         // Apply initial filter if searchTerm is provided
@@ -120,9 +165,59 @@ export default {
       }
     }
     
-    // Function to add product to cart
-    const addToCart = async (product) => {
+    // Function to fetch current cart info
+    const fetchCartInfo = async () => {
       try {
+        const response = await fetch('http://localhost:3000/api/cart')
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`)
+        }
+        
+        const cartData = await response.json()
+        cartItemCount.value = cartData.reduce((total, item) => total + item.quantity, 0)
+      } catch (err) {
+        console.error('Error fetching cart info:', err)
+      }
+    }
+    
+    // Function to add product to cart
+    const addToCart = async (product, event) => {
+      try {
+        // Apply visual feedback - method 1: Button text change
+        product.isAddedAnimation = true
+        
+        // Apply visual feedback - method 2: Card highlight
+        product.isHighlighted = true
+        
+        // Apply visual feedback - method 3: Animation flying to cart
+        if (event) {
+          const buttonRect = event.target.getBoundingClientRect()
+          
+          // Find the cart button element
+          const cartButton = document.querySelector('.view-cart-button')
+          if (cartButton) {
+            const cartRect = cartButton.getBoundingClientRect()
+            
+            // Start animation
+            animationStyle.value = {
+              top: `${buttonRect.top}px`,
+              left: `${buttonRect.left}px`
+            }
+            animatingProduct.value = product
+            
+            // Animate to cart position
+            setTimeout(() => {
+              animationStyle.value = {
+                top: `${cartRect.top}px`,
+                left: `${cartRect.left}px`,
+                transform: 'scale(0.2)',
+                opacity: '0'
+              }
+            }, 50)
+          }
+        }
+        
+        // Send API request
         const response = await fetch('http://localhost:3000/api/cart', {
           method: 'POST',
           headers: {
@@ -135,6 +230,26 @@ export default {
           throw new Error(`API error: ${response.status}`)
         }
         
+        // Update cart count
+        cartItemCount.value += 1
+        
+        // Apply visual feedback - method 4: Toast notification
+        toastMessage.value = `${product.name} added to cart!`
+        showToast.value = true
+        
+        // Reset animations after appropriate delays
+        setTimeout(() => {
+          product.isAddedAnimation = false
+          product.isHighlighted = false
+          showToast.value = false
+        }, 2000)
+        
+        setTimeout(() => {
+          if (animatingProduct.value === product) {
+            animatingProduct.value = null
+          }
+        }, 800)
+        
         // Dispatch event for the shell (and other MFEs) that the cart has been updated
         window.dispatchEvent(new CustomEvent('cart-updated', { 
           detail: { productId: product.id, quantity: 1 }
@@ -143,7 +258,15 @@ export default {
         console.log(`Added ${product.name} to cart`)
       } catch (err) {
         console.error('Error adding to cart:', err)
-        // Handle error - in a real app we might show a toast or notification
+        product.isAddedAnimation = false
+        product.isHighlighted = false
+        
+        // Show error toast
+        toastMessage.value = `Error adding ${product.name} to cart!`
+        showToast.value = true
+        setTimeout(() => {
+          showToast.value = false
+        }, 3000)
       }
     }
     
@@ -160,6 +283,18 @@ export default {
       }))
     }
     
+    // Function to view cart
+    const viewCart = () => {
+      console.log('Navigating to shopping cart')
+      
+      // Dispatch a navigation event for the shell to handle
+      window.dispatchEvent(new CustomEvent('navigate', { 
+        detail: { 
+          path: '/shopping-cart'
+        }
+      }))
+    }
+    
     // Listen for search events from the shell
     onMounted(() => {
       console.log('ProductList component mounted')
@@ -167,20 +302,32 @@ export default {
       // Fetch products when the component mounts
       fetchProducts()
       
-      // Listen for search events from the shell
-      window.addEventListener('search', (event) => {
+      // Fetch initial cart data
+      fetchCartInfo()
+      
+      // Define the search event handler
+      searchEventHandler = (event) => {
         console.log('Search event received in ProductList:', event.detail)
         if (event.detail && event.detail.query) {
           // This is a fallback - normally search term would come through props
           filterProducts()
         }
-      })
+      }
+      
+      // Define the cart updated event handler
+      cartUpdatedHandler = () => {
+        fetchCartInfo()
+      }
+      
+      // Listen for search events from the shell
+      window.addEventListener('search', searchEventHandler)
+      
+      // Listen for cart update events
+      window.addEventListener('cart-updated', cartUpdatedHandler)
     })
     
-    // Clean up event listeners when component is unmounted
-    const cleanup = () => {
-      window.removeEventListener('search', () => {})
-    }
+    // Register cleanup function to run when component is unmounted
+    onUnmounted(cleanup)
     
     // Watch for changes in the searchTerm prop
     watch(() => props.searchTerm, (newSearchTerm, oldSearchTerm) => {
@@ -193,9 +340,15 @@ export default {
       filteredProducts,
       error,
       loading,
+      cartItemCount,
+      showToast,
+      toastMessage,
+      animatingProduct,
+      animationStyle,
       addToCart,
       clearSearch,
-      navigateToProductDetails
+      navigateToProductDetails,
+      viewCart
     }
   }
 }
@@ -205,17 +358,65 @@ export default {
 .product-list-container {
   padding: 20px;
   font-family: 'Arial', sans-serif;
+  position: relative;
 }
 
-.search-results-info {
+.product-list-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+}
+
+.search-results-info {
+  display: flex;
+  flex: 1;
+  justify-content: flex-start;
+  align-items: center;
   padding: 10px 15px;
   background-color: #f9f9f9;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.view-cart-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 15px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s;
+  position: relative;
+  margin-left: 15px;
+}
+
+.view-cart-button:hover {
+  background-color: #45a049;
+}
+
+.cart-icon {
+  font-size: 18px;
+}
+
+.cart-count {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background-color: #ff4757;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
 }
 
 .clear-search-button {
@@ -227,6 +428,7 @@ export default {
   cursor: pointer;
   font-size: 14px;
   transition: background-color 0.2s;
+  margin-left: 10px;
 }
 
 .clear-search-button:hover {
@@ -237,6 +439,7 @@ export default {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 25px;
+  position: relative;
 }
 
 .product-card {
@@ -311,11 +514,15 @@ export default {
   border: none;
   font-weight: bold;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.2s;
 }
 
 .add-to-cart-button:hover {
   background-color: #45a049;
+}
+
+.add-to-cart-button.added {
+  background-color: #2c974b;
 }
 
 .no-results {
@@ -339,6 +546,69 @@ export default {
   margin-right: auto;
 }
 
+/* Toast notification styling */
+.toast-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background-color: #4CAF50;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  transform: translateX(120%);
+  transition: transform 0.3s ease-in-out;
+}
+
+.toast-notification.show {
+  transform: translateX(0);
+}
+
+.toast-content {
+  display: flex;
+  align-items: center;
+}
+
+.toast-icon {
+  margin-right: 10px;
+  font-size: 18px;
+}
+
+.toast-message {
+  font-weight: 500;
+}
+
+/* Cart animation */
+.cart-animation {
+  position: fixed;
+  z-index: 1000;
+  transition: all 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.cart-animation-icon {
+  background-color: #4CAF50;
+  color: white;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Product highlight animation */
+@keyframes highlight {
+  0% { box-shadow: 0 0 0 rgba(76, 175, 80, 0); }
+  50% { box-shadow: 0 0 20px rgba(76, 175, 80, 0.8); }
+  100% { box-shadow: 0 0 0 rgba(76, 175, 80, 0); }
+}
+
+.highlight-animation {
+  animation: highlight 1s ease-out;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .product-grid {
@@ -348,6 +618,16 @@ export default {
   
   .product-image-container {
     height: 180px;
+  }
+  
+  .product-list-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .view-cart-button {
+    margin-top: 10px;
+    margin-left: 0;
   }
 }
 
