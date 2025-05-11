@@ -608,7 +608,363 @@
   - **Domain-First**: Identify business domains before technical boundaries
   - **Iterative Adoption**: Start small with non-critical areas
 
-### 9. Conclusion and Future Work (3 minutes)
+### 9. Component Development and Shell Integration (6 minutes)
+
+- **Micro-Frontend Component Development Process**:
+  - **Framework Selection**: Vue.js for all micro-frontends
+    ```bash
+    # Creating a new micro-frontend component
+    vue create -m npm --merge --no-git --preset default product-details
+    
+    # Installing required dependencies
+    cd product-details
+    npm install webpack webpack-cli axios
+    ```
+  
+  - **Project Structure** for each micro-frontend:
+    ```
+    product-details/
+    ├── node_modules/
+    ├── public/
+    ├── src/
+    │   ├── assets/           # Images and styling
+    │   ├── components/       # Vue components
+    │   │   └── ProductDetails.vue  # Main exposed component
+    │   ├── App.vue           # Standalone mode container
+    │   ├── bootstrap.js      # Federation entry point
+    │   └── main.js           # Application entry point
+    ├── package.json          # Dependencies and scripts
+    ├── vue.config.js         # Module Federation configuration
+    └── README.md             # Component documentation
+    ```
+  
+  - **Module Federation Configuration** for each micro-frontend:
+    ```javascript
+    // product-details/vue.config.js
+    const { defineConfig } = require('@vue/cli-service');
+    const ModuleFederationPlugin = require('webpack/lib/container/ModuleFederationPlugin');
+    
+    module.exports = defineConfig({
+      publicPath: 'http://localhost:8084/',
+      configureWebpack: {
+        plugins: [
+          new ModuleFederationPlugin({
+            name: 'productDetails',
+            filename: 'remoteEntry.js',
+            exposes: {
+              './ProductDetails': './src/components/ProductDetails.vue'
+            },
+            shared: {
+              vue: { singleton: true, eager: true }
+            }
+          })
+        ]
+      },
+      devServer: {
+        port: 8084,
+        hot: true
+      }
+    });
+    ```
+  
+  - **Component Implementation** with WebSocket integration:
+    ```vue
+    <!-- ProductDetails.vue (simplified) -->
+    <template>
+      <div class="product-details">
+        <div class="product-header">
+          <h2>{{ product.name }}</h2>
+          <div class="connection-status" :class="{ connected: isConnected }">
+            <span class="status-indicator"></span>
+            <span>{{ isConnected ? 'Live Updates' : 'Offline' }}</span>
+          </div>
+        </div>
+        
+        <div class="product-content">
+          <img :src="product.image" :alt="product.name" class="product-image">
+          <div class="product-info">
+            <p class="price">€{{ product.price?.toFixed(2) }}</p>
+            <p class="description">{{ product.description }}</p>
+            
+            <div class="purchase-options">
+              <div class="quantity-selector">
+                <button @click="decrementQuantity">-</button>
+                <input type="number" v-model.number="quantity" min="1">
+                <button @click="incrementQuantity">+</button>
+              </div>
+              
+              <button class="add-to-cart" @click="addToCart">
+                Add to Cart
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+    
+    <script>
+    import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
+    import axios from 'axios';
+    
+    export default {
+      name: 'ProductDetails',
+      props: {
+        productId: {
+          type: [String, Number],
+          required: true
+        }
+      },
+      setup(props) {
+        const product = ref({});
+        const quantity = ref(1);
+        const loading = ref(true);
+        const error = ref(null);
+        const wsRef = ref(null);
+        const isConnected = ref(false);
+        
+        // Fetch product data
+        const fetchProduct = async () => {
+          try {
+            loading.value = true;
+            const response = await axios.get(
+              `http://localhost:3000/api/products/${props.productId}`
+            );
+            product.value = response.data;
+          } catch (err) {
+            error.value = err.message;
+          } finally {
+            loading.value = false;
+          }
+        };
+        
+        // Add product to cart
+        const addToCart = async () => {
+          try {
+            await axios.post('http://localhost:3000/api/cart', {
+              productId: props.productId,
+              quantity: quantity.value
+            });
+            
+            // Show success feedback
+            // ...
+          } catch (err) {
+            error.value = err.message;
+          }
+        };
+        
+        // Setup WebSocket connection
+        const setupWebSocket = () => {
+          wsRef.value = new WebSocket('ws://localhost:3000');
+          
+          wsRef.value.onopen = () => {
+            isConnected.value = true;
+            console.log('WebSocket connection established');
+          };
+          
+          wsRef.value.onmessage = (event) => {
+            try {
+              const message = JSON.parse(event.data);
+              
+              if (message.type === 'INVENTORY_UPDATE' && 
+                  message.data.productId === Number(props.productId)) {
+                // Update product inventory data in real-time
+                product.value.inStock = message.data.inStock;
+              }
+            } catch (err) {
+              console.error('Error processing message:', err);
+            }
+          };
+          
+          wsRef.value.onclose = () => {
+            isConnected.value = false;
+          };
+        };
+        
+        // Quantity adjustment methods
+        const incrementQuantity = () => { quantity.value++; };
+        const decrementQuantity = () => { 
+          if (quantity.value > 1) quantity.value--; 
+        };
+        
+        // Lifecycle hooks
+        onMounted(() => {
+          fetchProduct();
+          setupWebSocket();
+        });
+        
+        onBeforeUnmount(() => {
+          if (wsRef.value) wsRef.value.close();
+        });
+        
+        // Watch for productId changes
+        watch(() => props.productId, fetchProduct);
+        
+        return {
+          product,
+          quantity,
+          loading,
+          error,
+          isConnected,
+          addToCart,
+          incrementQuantity,
+          decrementQuantity
+        };
+      }
+    };
+    </script>
+    ```
+
+- **Bootstrap and Mounting Strategy**:
+  ```javascript
+  // product-details/src/bootstrap.js
+  import { createApp } from 'vue';
+  import App from './App.vue';
+  
+  // Mount function for standalone or federated use
+  const mount = (el) => {
+    const app = createApp(App);
+    app.mount(el);
+  };
+  
+  // If running in standalone mode
+  if (!window.__POWERED_BY_FEDERATION__) {
+    mount('#app');
+  }
+  
+  // Export for container use
+  export { mount };
+  ```
+
+- **Shell Integration and Dynamic Loading**:
+  - **Suspense API** for asynchronous component loading:
+    ```vue
+    <!-- Shell App.vue (partial) -->
+    <Suspense>
+      <template #default>
+        <RemoteProductDetails 
+          v-if="isProductDetailsLoaded" 
+          :productId="selectedProductId"
+        />
+        <div v-else class="loading-container">
+          <div class="loading-spinner"></div>
+          <p>Loading Product Details...</p>
+        </div>
+      </template>
+      <template #fallback>
+        <div class="loading-container">
+          <div class="loading-spinner"></div>
+          <p>Loading component...</p>
+        </div>
+      </template>
+    </Suspense>
+    ```
+  
+  - **Routing Integration** in the shell:
+    ```javascript
+    // In Shell App.vue
+    const navigateTo = (view, params) => {
+      console.log(`Navigation clicked: ${view}`, params);
+      currentView.value = view;
+      
+      if (view === 'product-details' && params && params.productId) {
+        selectedProductId.value = params.productId;
+        
+        // Update URL for bookmarking
+        const url = new URL(window.location);
+        url.searchParams.set('view', 'product-details');
+        url.searchParams.set('id', params.productId);
+        window.history.pushState({}, '', url);
+      }
+    };
+    
+    // Handle navigation events from micro-frontends
+    const handleNavigation = (event) => {
+      if (event.detail && event.detail.path) {
+        if (event.detail.path === '/product-details' && event.detail.productId) {
+          navigateTo('product-details', { productId: event.detail.productId });
+        }
+        // Other navigation paths...
+      }
+    };
+    
+    // Listen for navigation events
+    window.addEventListener('navigate', handleNavigation);
+    ```
+
+- **WebSocket Integration in Micro-Frontends**:
+  - **Connection Management** centralized in shell:
+    ```javascript
+    // In Shell App.vue
+    const setupWebSocket = () => {
+      wsRef.value = new WebSocket('ws://localhost:3000');
+      
+      wsRef.value.onopen = () => {
+        console.log('Shell: WebSocket connection established');
+        wsConnected.value = true;
+      };
+      
+      wsRef.value.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          // Handle different message types
+          if (data.type === 'CART_UPDATE') {
+            cartItemCount.value = data.data.length || 0;
+          } else if (data.type === 'INVENTORY_UPDATE') {
+            // Broadcast to all micro-frontends via custom events
+            window.dispatchEvent(new CustomEvent('inventory-updated', {
+              detail: data.data
+            }));
+          }
+        } catch (err) {
+          console.error('Error processing message:', err);
+        }
+      };
+      
+      // Error and close handlers...
+    };
+    ```
+  
+  - **Individual WebSocket Connections** in each micro-frontend:
+    - Benefits: Independence, resilience to shell failures
+    - Drawbacks: Multiple connections per user, potential resource waste
+
+- **Cross-Component Communication in Action**:
+  1. **User adds product to cart** in Product Details component
+  2. **REST API request** sent to backend
+  3. **Backend broadcasts update** via WebSocket
+  4. **All connected components** update in real-time:
+     - Shell updates cart count badge
+     - Shopping Cart updates items and totals
+     - Product Details updates inventory status
+  5. **User sees instant feedback** across the entire application
+
+- **Development and Testing Workflow**:
+  - **Independent Development**:
+    ```bash
+    # Start a single micro-frontend for development
+    cd product-details
+    npm run serve
+    # Access at http://localhost:8084
+    ```
+  
+  - **Integration Testing**:
+    ```bash
+    # From root directory, start all components
+    npm run start-all
+    # Access shell at http://localhost:8082
+    ```
+  
+  - **Testing WebSocket Communication**:
+    ```javascript
+    // Browser console test
+    const ws = new WebSocket('ws://localhost:3000');
+    ws.onopen = () => console.log('Connected');
+    ws.onmessage = (e) => console.log('Message:', JSON.parse(e.data));
+    ws.send(JSON.stringify({ type: 'CART_REQUEST' }));
+    ```
+
+### 10. Conclusion and Future Work (3 minutes)
 
 - **Key Findings**:
   - WebSockets provide significant benefits for micro-frontend communication:
@@ -654,7 +1010,7 @@
   - Framework-agnostic patterns identified
   - Test suite for WebSocket resilience
 
-### 10. Questions and Discussion (Open)
+### 11. Questions and Discussion (Open)
 
 - Prepare for questions about:
   - Technical implementation details
