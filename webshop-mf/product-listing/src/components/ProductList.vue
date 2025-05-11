@@ -10,16 +10,23 @@
 
     <!-- Header with search results and cart button -->
     <div class="product-list-header">
-      <div v-if="searchTerm" class="search-results-info">
-        <p>{{ filteredProducts.length }} results for "{{ searchTerm }}"</p>
-        <button @click="clearSearch" class="clear-search-button">Clear Search</button>
+      <div class="header-left">
+        <div v-if="searchTerm" class="search-results-info">
+          <p>{{ filteredProducts.length }} results for "{{ searchTerm }}"</p>
+          <button @click="clearSearch" class="clear-search-button">Clear Search</button>
+        </div>
+        <div v-else class="products-title">
+          <h2>Products</h2>
+        </div>
       </div>
 
-      <button @click="viewCart" class="view-cart-button">
-        <span class="cart-icon">🛒</span>
-        <span v-if="cartItemCount > 0" class="cart-count">{{ cartItemCount }}</span>
-        View Cart
-      </button>
+      <div class="cart-controls">
+        <button @click="viewCart" class="view-cart-button">
+          <span class="cart-icon">🛒</span>
+          <span v-if="cartItemCount > 0" class="cart-count">{{ cartItemCount }}</span>
+          View Cart
+        </button>
+      </div>
     </div>
 
     <!-- No results message -->
@@ -193,7 +200,7 @@ export default {
         if (event) {
           const buttonRect = event.target.getBoundingClientRect()
           
-          // Find the cart button element
+          // Find the cart button element - using the more specific selector
           const cartButton = document.querySelector('.view-cart-button')
           if (cartButton) {
             const cartRect = cartButton.getBoundingClientRect()
@@ -201,16 +208,17 @@ export default {
             // Start animation
             animationStyle.value = {
               top: `${buttonRect.top}px`,
-              left: `${buttonRect.left}px`
+              left: `${buttonRect.left}px`,
+              opacity: '1'
             }
             animatingProduct.value = product
             
             // Animate to cart position
             setTimeout(() => {
               animationStyle.value = {
-                top: `${cartRect.top}px`,
-                left: `${cartRect.left}px`,
-                transform: 'scale(0.2)',
+                top: `${cartRect.top + (cartRect.height / 2) - 20}px`,
+                left: `${cartRect.left + (cartRect.width / 2) - 20}px`,
+                transform: 'scale(0.5)',
                 opacity: '0'
               }
             }, 50)
@@ -285,14 +293,37 @@ export default {
     
     // Function to view cart
     const viewCart = () => {
-      console.log('Navigating to shopping cart')
+      console.log('Trying to navigate to shopping cart');
       
-      // Dispatch a navigation event for the shell to handle
-      window.dispatchEvent(new CustomEvent('navigate', { 
+      // Try multiple approaches for maximum compatibility
+      
+      // Method 1: Use the exposed shell navigation function
+      if (window.shellNavigateTo) {
+        console.log('Using shellNavigateTo global function');
+        window.shellNavigateTo('cart');
+        return; // Exit early if this works
+      }
+      
+      // Method 2: Dispatch a custom event
+      console.log('Dispatching navigate event');
+      const navigateEvent = new CustomEvent('navigate', { 
         detail: { 
-          path: '/shopping-cart'
+          path: '/cart'
+        },
+        bubbles: true,
+        cancelable: true
+      });
+      window.dispatchEvent(navigateEvent);
+      
+      // Method 3: Try to access shell app directly
+      try {
+        if (window.__shell_app && typeof window.__shell_app.setView === 'function') {
+          console.log('Using direct shell app access');
+          window.__shell_app.setView('cart');
         }
-      }))
+      } catch (err) {
+        console.error('Error using direct shell app access:', err);
+      }
     }
     
     // Listen for search events from the shell
@@ -304,6 +335,11 @@ export default {
       
       // Fetch initial cart data
       fetchCartInfo()
+      
+      // Add debug to check for event listeners on the window object
+      console.log('Checking window object:', window);
+      console.log('Window parent:', window.parent);
+      console.log('Is window top?', window === window.top);
       
       // Define the search event handler
       searchEventHandler = (event) => {
@@ -366,12 +402,22 @@ export default {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  width: 100%;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.products-title h2 {
+  margin: 0;
+  font-size: 24px;
+  color: #333;
 }
 
 .search-results-info {
   display: flex;
-  flex: 1;
-  justify-content: flex-start;
   align-items: center;
   padding: 10px 15px;
   background-color: #f9f9f9;
@@ -383,24 +429,33 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 15px;
+  padding: 10px 20px;
   background-color: #4CAF50;
   color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
   font-weight: bold;
-  transition: background-color 0.2s;
+  font-size: 16px;
+  transition: all 0.3s;
   position: relative;
-  margin-left: 15px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+  z-index: 10; /* Ensure it's above other elements for animation targeting */
 }
 
 .view-cart-button:hover {
   background-color: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
-.cart-icon {
-  font-size: 18px;
+.view-cart-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.view-cart-button .cart-icon {
+  font-size: 20px;
 }
 
 .cart-count {
@@ -596,6 +651,7 @@ export default {
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  font-size: 20px;
 }
 
 /* Product highlight animation */
@@ -625,9 +681,12 @@ export default {
     align-items: stretch;
   }
   
+  .header-left {
+    margin-bottom: 10px;
+  }
+  
   .view-cart-button {
-    margin-top: 10px;
-    margin-left: 0;
+    align-self: flex-start;
   }
 }
 
@@ -641,5 +700,21 @@ export default {
     align-items: flex-start;
     gap: 10px;
   }
+}
+
+.cart-controls {
+  display: flex;
+  align-items: center;
+}
+
+.cart-direct-link {
+  font-size: 12px;
+  color: #666;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.cart-direct-link:hover {
+  color: #4CAF50;
 }
 </style>

@@ -6,6 +6,44 @@
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <link rel="icon" href="<%= BASE_URL %>favicon.ico">
     <title><%= htmlWebpackPlugin.options.title %></title>
+    <!-- Test Script for Direct Navigation -->
+    <script>
+      // Wait for page to load
+      window.addEventListener('DOMContentLoaded', () => {
+        console.log('Shell app loaded - checking for navigation function');
+        
+        // Create a debug button to test direct navigation
+        setTimeout(() => {
+          if (window.shellNavigateTo) {
+            console.log('Shell navigation function available!');
+            
+            // Create a debug button
+            const debugBtn = document.createElement('button');
+            debugBtn.textContent = 'TEST NAV TO CART';
+            debugBtn.style.position = 'fixed';
+            debugBtn.style.bottom = '10px';
+            debugBtn.style.right = '10px';
+            debugBtn.style.zIndex = '9999';
+            debugBtn.style.padding = '10px';
+            debugBtn.style.background = 'red';
+            debugBtn.style.color = 'white';
+            debugBtn.style.border = 'none';
+            debugBtn.style.borderRadius = '5px';
+            
+            // Add click handler
+            debugBtn.addEventListener('click', () => {
+              console.log('Debug button clicked - navigating to cart');
+              window.shellNavigateTo('cart');
+            });
+            
+            // Add to document
+            document.body.appendChild(debugBtn);
+          } else {
+            console.log('Shell navigation function NOT available');
+          }
+        }, 3000); // Wait 3 seconds to ensure the app has fully initialized
+      });
+    </script>
   </head>
   <body>
     <noscript>

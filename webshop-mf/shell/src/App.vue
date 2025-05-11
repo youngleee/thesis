@@ -163,6 +163,10 @@ export default {
     const wsRef = ref(null)
     const wsConnected = ref(false)
     
+    // Create variables to store event listener callbacks
+    let navigateEventHandler;
+    let clearSearchHandler;
+    
     // Handle window resize
     const handleResize = () => {
       isDesktopView.value = window.innerWidth >= 800
@@ -180,6 +184,18 @@ export default {
         const url = new URL(window.location)
         url.searchParams.set('view', 'product-details')
         url.searchParams.set('id', params.productId)
+        window.history.pushState({}, '', url)
+      } else if (view === 'cart') {
+        // Update URL for cart view
+        const url = new URL(window.location)
+        url.searchParams.set('view', 'cart')
+        url.searchParams.delete('id') // Remove product ID if present
+        window.history.pushState({}, '', url)
+      } else if (view === 'products') {
+        // Update URL for products view
+        const url = new URL(window.location)
+        url.searchParams.delete('view')
+        url.searchParams.delete('id')
         window.history.pushState({}, '', url)
       }
     }
@@ -200,15 +216,26 @@ export default {
     
     // Handle navigation events from micro-frontends
     const handleNavigation = (event) => {
-      console.log('Navigation event received:', event.detail)
+      console.log('Navigation event received in shell:', event);
+      console.log('Navigation event detail:', event.detail);
+      
       if (event.detail && event.detail.path) {
+        console.log(`Processing navigation to path: ${event.detail.path}`);
+        
         if (event.detail.path === '/products') {
-          navigateTo('products')
+          console.log('Navigating to products view');
+          navigateTo('products');
         } else if (event.detail.path === '/cart') {
-          navigateTo('cart')
+          console.log('Navigating to cart view');
+          navigateTo('cart');
         } else if (event.detail.path === '/product-details' && event.detail.productId) {
-          navigateTo('product-details', { productId: event.detail.productId })
+          console.log(`Navigating to product details for ID: ${event.detail.productId}`);
+          navigateTo('product-details', { productId: event.detail.productId });
+        } else {
+          console.log(`Unknown path: ${event.detail.path}`);
         }
+      } else {
+        console.log('Invalid navigation event: missing path in event detail', event);
       }
     }
     
@@ -305,13 +332,41 @@ export default {
     
     // Check URL for initial view and product ID
     const initFromUrl = () => {
-      const urlParams = new URLSearchParams(window.location.search)
-      const viewParam = urlParams.get('view')
-      const productIdParam = urlParams.get('id')
+      console.log('Initializing from URL parameters');
+      const urlParams = new URLSearchParams(window.location.search);
+      const viewParam = urlParams.get('view');
+      const productIdParam = urlParams.get('id');
+      
+      console.log('URL parameters:', { view: viewParam, id: productIdParam });
       
       if (viewParam === 'product-details' && productIdParam) {
-        selectedProductId.value = productIdParam
-        currentView.value = 'product-details'
+        console.log(`Setting view to product-details with ID: ${productIdParam}`);
+        selectedProductId.value = productIdParam;
+        currentView.value = 'product-details';
+      } else if (viewParam === 'cart') {
+        console.log('Setting view to cart');
+        currentView.value = 'cart';
+      } else if (viewParam === 'products') {
+        console.log('Setting view to products');
+        currentView.value = 'products';
+      }
+      
+      // Check if we have a stored navigation target in sessionStorage
+      try {
+        const navTarget = sessionStorage.getItem('navTarget');
+        if (navTarget) {
+          console.log(`Found navigation target in sessionStorage: ${navTarget}`);
+          
+          if (navTarget === 'cart') {
+            console.log('Setting view to cart from sessionStorage');
+            currentView.value = 'cart';
+          }
+          
+          // Clear the stored target after using it
+          sessionStorage.removeItem('navTarget');
+        }
+      } catch (err) {
+        console.error('Error reading from sessionStorage:', err);
       }
     }
     
@@ -322,17 +377,50 @@ export default {
       isShoppingCartLoaded.value = true
       isProductDetailsLoaded.value = true
       
+      // Expose the navigation function globally for direct access from micro-frontends
+      console.log('Exposing shell navigation function globally')
+      window.shellNavigateTo = navigateTo
+      
+      // Expose the app instance for direct manipulation if needed
+      window.__shell_app = {
+        setView: (view) => {
+          console.log(`Direct view set to: ${view}`)
+          currentView.value = view
+        }
+      }
+      
       // Initialize view from URL if applicable
       initFromUrl()
       
-      // Add event listeners
+      console.log('Setting up event listeners in Shell application...')
+      
+      // Add event listeners with explicit this binding
       window.addEventListener('resize', handleResize)
-      window.addEventListener('navigate', handleNavigation)
+      
+      // Store the navigation event handler in a variable for later removal
+      navigateEventHandler = (event) => {
+        console.log('Navigation event received in App.vue:', event.detail)
+        handleNavigation(event)
+      };
+      
+      // Navigation event handler with extra logging
+      console.log('Adding navigate event listener')
+      window.addEventListener('navigate', navigateEventHandler)
+      
       window.addEventListener('cart-updated', handleCartUpdate)
       window.addEventListener('popstate', initFromUrl)
-      window.addEventListener('clear-search', () => {
+      
+      // Store the clear search handler in a variable for later removal
+      clearSearchHandler = () => {
         searchQuery.value = ''
-      })
+      };
+      window.addEventListener('clear-search', clearSearchHandler)
+      
+      // Test if event listener is working by dispatching a test event
+      console.log('Testing event listener with dummy event...')
+      window.dispatchEvent(new CustomEvent('navigate-test', { 
+        detail: { test: 'This is a test event' }
+      }))
       
       // Set up WebSocket connection
       setupWebSocket()
@@ -347,12 +435,13 @@ export default {
           wsRef.value = null
         }
         
-        // Remove event listeners
+        // Remove event listeners with direct references to the same handler functions
+        console.log('Removing event listeners')
         window.removeEventListener('resize', handleResize)
-        window.removeEventListener('navigate', handleNavigation)
+        window.removeEventListener('navigate', navigateEventHandler)
         window.removeEventListener('cart-updated', handleCartUpdate)
         window.removeEventListener('popstate', initFromUrl)
-        window.removeEventListener('clear-search', () => {})
+        window.removeEventListener('clear-search', clearSearchHandler)
       })
     })
     
