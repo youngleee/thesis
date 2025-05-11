@@ -2,18 +2,20 @@
 
 ## Introduction
 
-This documentation provides a comprehensive overview of the WebShop micro-frontend application, with a special focus on real-time communication using WebSockets. This project demonstrates how to structure a scalable, maintainable e-commerce application using micro-frontend architecture principles while ensuring seamless real-time updates across independently deployable frontend components.
+This documentation provides a comprehensive overview of the WebShop micro-frontend application, with a special focus on real-time communication using WebSockets and SQLite for data persistence. This project demonstrates how to structure a scalable, maintainable e-commerce application using micro-frontend architecture principles while ensuring seamless real-time updates across independently deployable frontend components.
 
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)
 2. [WebSocket Implementation](#websocket-implementation)
-3. [Micro-Frontend Components](#micro-frontend-components)
-4. [Backend Services](#backend-services)
-5. [Communication Patterns](#communication-patterns)
-6. [Deployment Strategy](#deployment-strategy)
-7. [Performance Considerations](#performance-considerations)
-8. [Future Enhancements](#future-enhancements)
+3. [SQLite Integration](#sqlite-integration)
+4. [Micro-Frontend Components](#micro-frontend-components)
+5. [Backend Services](#backend-services)
+6. [Communication Patterns](#communication-patterns)
+7. [Setup and Running](#setup-and-running)
+8. [Deployment Strategy](#deployment-strategy)
+9. [Performance Considerations](#performance-considerations)
+10. [Future Enhancements](#future-enhancements)
 
 ## Architecture Overview
 
@@ -40,6 +42,18 @@ Detailed documentation:
 2. **Reduced Network Overhead**: 99.7% reduction in requests compared to polling
 3. **Enhanced User Experience**: Instantaneous updates create a seamless shopping experience
 4. **Resilient Design**: Fallback mechanisms ensure functionality even when WebSockets are unavailable
+
+## SQLite Integration
+
+The backend service utilizes SQLite for data persistence, providing a lightweight yet powerful database solution:
+
+- **Self-contained database**: The entire database exists as a single file
+- **Zero configuration**: No separate server process to install or manage
+- **ACID compliant**: Ensures data integrity
+- **Schema-based**: Well-defined tables for products and cart items
+- **Perfect for thesis demonstration**: Easy to showcase data persistence without complex setup
+
+The SQLite database automatically creates the necessary tables and stores product and cart information persistently.
 
 ## Micro-Frontend Components
 
@@ -89,7 +103,8 @@ The backend provides RESTful APIs and WebSocket services for the micro-frontends
 
 - **RESTful API**: Supports standard CRUD operations for products and cart
 - **WebSocket Server**: Enables real-time updates across micro-frontends
-- **In-Memory Store**: Simulates a database (would be replaced with a real database in production)
+- **SQLite Database**: Provides persistent storage for products and cart items
+- **Publisher-Subscriber Model**: Broadcasts cart updates to all connected clients
 
 ## Communication Patterns
 
@@ -109,6 +124,18 @@ The combination of RESTful API and WebSocket communication provides:
 - Real-time updates for enhanced user experience
 - Fallback mechanisms for resilience
 - Loose coupling between micro-frontends
+
+## Setup and Running
+
+Detailed instructions for setting up and running the WebShop application:
+
+- [Running the Application](./RunningTheApplication.md): Comprehensive guide for installation, running different components, and troubleshooting common issues
+
+This guide covers:
+- Prerequisites and installation steps
+- Different ways to run the application (batch file, PowerShell scripts, npm commands)
+- Troubleshooting common issues
+- Development tips for working with SQLite and WebSockets
 
 ## Deployment Strategy
 
@@ -135,7 +162,10 @@ The application implements several performance optimizations:
 Potential areas for future development:
 
 1. **Authentication/Authorization**: User management and secured API endpoints
-2. **Persistent Data Storage**: Replace in-memory store with a database
+2. **Advanced Database Features**: 
+   - Migrations for schema evolution
+   - Transactions for complex operations
+   - Data backup and recovery mechanisms
 3. **Advanced WebSocket Features**: 
    - Topic-based channels for targeted updates
    - Connection pooling for scalability
@@ -147,4 +177,4 @@ Potential areas for future development:
 
 ## Conclusion
 
-This micro-frontend architecture with WebSocket integration demonstrates a modern approach to building complex, scalable web applications. By combining independent, domain-focused micro-frontends with real-time communication capabilities, the application achieves both architectural flexibility and an enhanced user experience. 
+This micro-frontend architecture with WebSocket integration and SQLite persistence demonstrates a modern approach to building complex, scalable web applications. By combining independent, domain-focused micro-frontends with real-time communication capabilities and proper data persistence, the application achieves architectural flexibility, enhanced user experience, and reliable data management. 

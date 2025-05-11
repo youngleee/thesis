@@ -11,10 +11,13 @@ This project demonstrates a micro-frontend architecture for an e-commerce applic
 - **Product Details**: Shows detailed information about a specific product
 - **Shopping Cart**: Manages the user's shopping cart with real-time updates
 
+The backend service provides both RESTful API endpoints and WebSocket communication, with data persistence using SQLite.
+
 ## Key Features
 
 - Micro-frontend architecture using Webpack 5 Module Federation
 - Real-time communication between micro-frontends via WebSockets
+- SQLite database for persistent data storage
 - Resilient design with fallback mechanisms for offline scenarios
 - Independent development and deployment of each micro-frontend
 - Shared dependencies to reduce bundle sizes
@@ -24,13 +27,14 @@ This project demonstrates a micro-frontend architecture for an e-commerce applic
 
 - Node.js (v14+)
 - npm (v6+)
-- Git
+- Windows PowerShell or Command Prompt
+- [DB Browser for SQLite](https://sqlitebrowser.org/) (optional, for database inspection)
 
 ## Installation
 
 Clone the repository and install dependencies:
 
-```bash
+```powershell
 # Clone the repository
 git clone <your-repo-url>
 cd webshop-mf
@@ -41,30 +45,39 @@ npm run install-all
 
 ## Running the Application
 
-You can start all services with a single command:
+### Quickest Method
+Double-click the `start-app.bat` file in the project root to launch all components.
 
-```bash
-npm run start-all
+### Using PowerShell Scripts
+Several PowerShell scripts are provided for different scenarios:
+
+```powershell
+# Start all components in separate windows
+.\start-all.ps1
+
+# Start all components in a single window
+.\start-all-single-window.ps1
+
+# Start only the backend server
+.\start-backend.ps1
 ```
 
-Or start each component individually:
+### Using NPM Scripts
+You can also use npm scripts:
 
-```bash
-# Start the backend server (REST API + WebSocket)
+```powershell
+# Start all services with a single command
+npm run start-all
+
+# Or start each component individually
 npm run start-backend
-
-# Start the Shell application
 npm run start-shell
-
-# Start the Product Listing micro-frontend
 npm run start-product-listing
-
-# Start the Product Details micro-frontend
 npm run start-product-details
-
-# Start the Shopping Cart micro-frontend
 npm run start-shopping-cart
 ```
+
+For detailed instructions and troubleshooting, see [Running the Application](./docs/RunningTheApplication.md).
 
 ## Accessing the Application
 
@@ -75,6 +88,7 @@ Once all services are running, you can access the application at:
 - **Product Details (Standalone)**: [http://localhost:8084](http://localhost:8084)
 - **Shopping Cart (Standalone)**: [http://localhost:8085](http://localhost:8085)
 - **Backend API**: [http://localhost:3000](http://localhost:3000)
+- **WebSocket Server**: [ws://localhost:3000](ws://localhost:3000)
 
 ## Project Scripts
 
@@ -114,6 +128,7 @@ Comprehensive documentation for this project can be found in the `/docs` directo
 - [Main Documentation Index](./docs/README.md)
 - [WebSocket Integration](./docs/WebSocketIntegration.md)
 - [WebSocket Communication Flow](./docs/WebSocketFlow.md)
+- [Running the Application](./docs/RunningTheApplication.md) - Detailed setup and troubleshooting guide
 
 ## Testing WebSocket Functionality
 
@@ -132,6 +147,7 @@ You can also observe the WebSocket communication:
 ```
 webshop-mf/
 ├── backend/                  # Backend server with REST API and WebSocket
+│   └── data/                 # SQLite database directory
 ├── shell/                    # Container application
 ├── product-listing/          # Product catalog micro-frontend
 ├── product-details/          # Product details micro-frontend
@@ -139,13 +155,18 @@ webshop-mf/
 ├── docs/                     # Documentation for thesis
 │   ├── README.md
 │   ├── WebSocketIntegration.md
-│   └── WebSocketFlow.md
+│   ├── WebSocketFlow.md
+│   └── RunningTheApplication.md
+├── start-all.ps1             # PowerShell script to start all components in separate windows
+├── start-all-single-window.ps1 # PowerShell script to start all components in one window
+├── start-backend.ps1         # PowerShell script to start only the backend
+├── start-app.bat             # Windows batch file for easy startup
 └── README.md                 # This file
 ```
 
 ## Thesis Research
 
-This project serves as a practical implementation for research on micro-frontend architectures with real-time communication. The implementation demonstrates how WebSockets can be effectively used to synchronize state across independently deployed frontend applications.
+This project serves as a practical implementation for research on micro-frontend architectures with real-time communication. The implementation demonstrates how WebSockets can be effectively used to synchronize state across independently deployed frontend applications, and how SQLite provides a lightweight yet effective solution for data persistence.
 
 ## License
 

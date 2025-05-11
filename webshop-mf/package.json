@@ -7,7 +7,7 @@
     "install-backend": "cd backend && npm install",
     "install-shell": "cd shell && npm install",
     "install-product-listing": "cd product-listing && npm install",
-    "install-product-details": "cd product-details && npm install", 
+    "install-product-details": "cd product-details && npm install",
     "install-shopping-cart": "cd shopping-cart && npm install",
     "start-all": "concurrently \"npm run start-backend\" \"npm run start-shell\" \"npm run start-product-listing\" \"npm run start-product-details\" \"npm run start-shopping-cart\"",
     "start-backend": "cd backend && npm run dev",
@@ -21,4 +21,4 @@
   },
   "author": "",
   "license": "MIT"
-} 
+}
