@@ -343,6 +343,12 @@ export default {
         console.log(`Setting view to product-details with ID: ${productIdParam}`);
         selectedProductId.value = productIdParam;
         currentView.value = 'product-details';
+        
+        // Add debug output to verify the state changes
+        console.log('After setting state:', { 
+          currentView: currentView.value, 
+          selectedProductId: selectedProductId.value 
+        });
       } else if (viewParam === 'cart') {
         console.log('Setting view to cart');
         currentView.value = 'cart';
@@ -360,6 +366,14 @@ export default {
           if (navTarget === 'cart') {
             console.log('Setting view to cart from sessionStorage');
             currentView.value = 'cart';
+          } else if (navTarget.startsWith('product-details:')) {
+            // Handle product detail navigation from session storage
+            const productId = navTarget.split(':')[1];
+            if (productId) {
+              console.log(`Setting view to product-details with ID: ${productId} from sessionStorage`);
+              selectedProductId.value = productId;
+              currentView.value = 'product-details';
+            }
           }
           
           // Clear the stored target after using it

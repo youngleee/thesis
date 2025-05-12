@@ -15,7 +15,8 @@ This documentation provides a comprehensive overview of the WebShop micro-fronte
 7. [Setup and Running](#setup-and-running)
 8. [Deployment Strategy](#deployment-strategy)
 9. [Performance Considerations](#performance-considerations)
-10. [Future Enhancements](#future-enhancements)
+10. [Troubleshooting](#troubleshooting)
+11. [Future Enhancements](#future-enhancements)
 
 ## Architecture Overview
 
@@ -116,6 +117,10 @@ The application employs several communication patterns:
 2. **Custom Browser Events**: For indirect communication between micro-frontends
 3. **WebSockets**: For real-time updates and synchronization
 4. **URL Parameters**: For sharing state that should be bookmarkable
+5. **Global Function Exposure**: Direct function access for critical navigation operations
+
+For a comprehensive overview of all communication patterns, see:
+- [Micro-Frontend Communication Patterns](./MicrofrontendCommunicationPatterns.md): Detailed analysis of all communication approaches
 
 ### Hybrid Approach Benefits
 
@@ -124,6 +129,18 @@ The combination of RESTful API and WebSocket communication provides:
 - Real-time updates for enhanced user experience
 - Fallback mechanisms for resilience
 - Loose coupling between micro-frontends
+
+### Cross-Micro-Frontend Navigation
+
+Navigation between micro-frontends presented specific challenges that were addressed with a multi-layered approach:
+
+- **Global Navigation Functions**: Exposed on the window object for direct access
+- **Custom Events**: Used for indirect communication
+- **URL Parameter Handling**: For bookmarkable navigation states
+- **Fallback Mechanisms**: Multiple approaches to ensure navigation reliability
+
+For detailed information on navigation implementation and troubleshooting, see:
+- [Cart Navigation Fixes](./CartNavigationFixes.md): Comprehensive analysis of cross-micro-frontend navigation challenges and solutions
 
 ## Setup and Running
 
@@ -136,6 +153,15 @@ This guide covers:
 - Different ways to run the application (batch file, PowerShell scripts, npm commands)
 - Troubleshooting common issues
 - Development tips for working with SQLite and WebSockets
+
+## Troubleshooting
+
+The WebShop application includes documentation for troubleshooting common issues:
+
+- [Cart Navigation Fixes](./CartNavigationFixes.md): Solutions for navigation issues between micro-frontends
+- [Running the Application](./RunningTheApplication.md): Common setup and initialization issues
+
+These guides provide practical solutions for the most commonly encountered problems during development and testing.
 
 ## Deployment Strategy
 

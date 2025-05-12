@@ -129,6 +129,8 @@ Comprehensive documentation for this project can be found in the `/docs` directo
 - [WebSocket Integration](./docs/WebSocketIntegration.md)
 - [WebSocket Communication Flow](./docs/WebSocketFlow.md)
 - [Running the Application](./docs/RunningTheApplication.md) - Detailed setup and troubleshooting guide
+- [Cart Navigation Fixes](./docs/CartNavigationFixes.md) - Troubleshooting solutions for micro-frontend navigation issues
+- [Micro-Frontend Communication Patterns](./docs/MicrofrontendCommunicationPatterns.md) - Comprehensive guide to all communication approaches
 
 ## Testing WebSocket Functionality
 
