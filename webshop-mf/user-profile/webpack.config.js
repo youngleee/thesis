@@ -4,7 +4,7 @@ const ModuleFederationPlugin = require('webpack/lib/container/ModuleFederationPl
 module.exports = {
   mode: 'development',
   devServer: {
-    port: 8084,
+    port: 8085,
     historyApiFallback: true,
     headers: {
       'Access-Control-Allow-Origin': '*',
