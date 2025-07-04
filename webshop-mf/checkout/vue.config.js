@@ -3,32 +3,32 @@ const ModuleFederationPlugin = require('webpack/lib/container/ModuleFederationPl
 
 module.exports = defineConfig({
   transpileDependencies: true,
-  publicPath: 'http://localhost:8082/',
+  publicPath: 'http://localhost:8085/',
   configureWebpack: {
     optimization: {
       splitChunks: false,
     },
     plugins: [
       new ModuleFederationPlugin({
-        name: 'shell',
+        name: 'checkout',
         filename: 'remoteEntry.js',
-        remotes: {
-          productListing: 'productListing@http://localhost:8081/remoteEntry.js',
-          shoppingCart: 'shoppingCart@http://localhost:8083/remoteEntry.js',
-          productDetails: 'productDetails@http://localhost:8084/remoteEntry.js',
-          checkout: 'checkout@http://localhost:8085/remoteEntry.js',
+        exposes: {
+          './Checkout': './src/components/Checkout.vue',
         },
         shared: {
           vue: {
             singleton: true,
             eager: true
+          },
+          axios: {
+            singleton: true,
           }
         }
       })
     ]
   },
   devServer: {
-    port: 8082,
+    port: 8085,
     hot: true,
   }
-})
+}) 

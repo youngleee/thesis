@@ -5,7 +5,7 @@ const session = require('express-session');
 const bcrypt = require('bcrypt');
 const { WebSocketServer } = require('ws');
 const http = require('http');
-const { initializeDatabase, products, cart, users } = require('./database');
+const { initializeDatabase, products, cart, users, orders } = require('./database');
 
 const app = express();
 const port = 3000;
@@ -18,7 +18,7 @@ const wss = new WebSocketServer({ server });
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:8082', 'http://localhost:8083', 'http://localhost:8084', 'http://localhost:8085'],
+  origin: ['http://localhost:8081', 'http://localhost:8082', 'http://localhost:8083', 'http://localhost:8084', 'http://localhost:8085'],
   credentials: true
 }));
 app.use(bodyParser.json());
@@ -380,6 +380,95 @@ app.put('/api/products/:id/stock', async (req, res) => {
   } catch (err) {
     console.error(`Error updating product stock ${req.params.id}:`, err);
     res.status(500).json({ error: 'Failed to update product stock' });
+  }
+});
+
+// API Routes for orders
+app.post('/api/orders', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const orderData = req.body;
+    
+    // Validation
+    if (!orderData.items || !orderData.shippingAddress || !orderData.paymentMethod) {
+      return res.status(400).json({ error: 'Order data is incomplete' });
+    }
+    
+    if (orderData.items.length === 0) {
+      return res.status(400).json({ error: 'Order must contain at least one item' });
+    }
+    
+    // Create order
+    const result = await orders.createOrder(userId, orderData);
+    
+    // Clear user's cart after successful order
+    await cart.clearCart(userId);
+    
+    // Broadcast cart update
+    broadcastCartUpdate(userId);
+    
+    res.status(201).json({
+      message: 'Order created successfully',
+      orderNumber: result.orderNumber,
+      orderId: result.orderId
+    });
+  } catch (err) {
+    console.error('Error creating order:', err);
+    res.status(500).json({ error: 'Failed to create order' });
+  }
+});
+
+app.get('/api/orders', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const userOrders = await orders.getOrdersByUserId(userId);
+    res.json(userOrders);
+  } catch (err) {
+    console.error('Error fetching orders:', err);
+    res.status(500).json({ error: 'Failed to fetch orders' });
+  }
+});
+
+app.get('/api/orders/:id', requireAuth, async (req, res) => {
+  try {
+    const orderId = req.params.id;
+    const order = await orders.getOrderById(orderId);
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    
+    // Check if user owns this order
+    if (order.user_id !== req.session.userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    res.json(order);
+  } catch (err) {
+    console.error(`Error fetching order ${req.params.id}:`, err);
+    res.status(500).json({ error: 'Failed to fetch order' });
+  }
+});
+
+app.put('/api/orders/:id/status', requireAuth, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const orderId = req.params.id;
+    
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+    
+    const result = await orders.updateOrderStatus(orderId, status);
+    
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    
+    res.json({ message: 'Order status updated successfully' });
+  } catch (err) {
+    console.error(`Error updating order status ${req.params.id}:`, err);
+    res.status(500).json({ error: 'Failed to update order status' });
   }
 });
 

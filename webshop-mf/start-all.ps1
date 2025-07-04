@@ -34,7 +34,11 @@ Start-Component -Name "Shell Application" -Path "shell" -Command "npm run serve"
 Start-Component -Name "Product Listing" -Path "product-listing" -Command "npm run serve"
 Start-Component -Name "Product Details" -Path "product-details" -Command "npm run serve"
 Start-Component -Name "Shopping Cart" -Path "shopping-cart" -Command "npm run serve"
+Start-Component -Name "Checkout" -Path "checkout" -Command "npm run serve"
 
 Write-Host "All components started successfully!" -ForegroundColor Cyan
 Write-Host "Access the application at http://localhost:8082" -ForegroundColor Yellow
-Write-Host "Backend API available at http://localhost:3000" -ForegroundColor Yellow 
+Write-Host "Backend API available at http://localhost:3000" -ForegroundColor Yellow
+
+# Launch the default browser to the shell application
+Start-Process "http://localhost:8082" 

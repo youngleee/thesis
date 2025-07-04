@@ -53,6 +53,37 @@ const initializeDatabase = () => {
         )
       `);
       
+      // Orders table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS orders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER,
+          order_number TEXT UNIQUE NOT NULL,
+          status TEXT DEFAULT 'pending',
+          subtotal REAL NOT NULL,
+          tax REAL NOT NULL,
+          total REAL NOT NULL,
+          shipping_address TEXT NOT NULL,
+          payment_method TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+      `);
+      
+      // Order items table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS order_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER NOT NULL,
+          product_id INTEGER NOT NULL,
+          product_name TEXT NOT NULL,
+          quantity INTEGER NOT NULL,
+          price REAL NOT NULL,
+          FOREIGN KEY (order_id) REFERENCES orders (id),
+          FOREIGN KEY (product_id) REFERENCES products (id)
+        )
+      `);
+      
       // Check if products table is empty
       db.get('SELECT COUNT(*) as count FROM products', (err, row) => {
         if (err) {
@@ -295,10 +326,105 @@ const cartMethods = {
   }
 };
 
+// Helper methods for orders
+const orderMethods = {
+  createOrder(userId, orderData) {
+    return new Promise((resolve, reject) => {
+      const orderNumber = 'ORD-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+      const shippingAddress = JSON.stringify(orderData.shippingAddress);
+      
+      db.run(`
+        INSERT INTO orders (user_id, order_number, subtotal, tax, total, shipping_address, payment_method) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [userId, orderNumber, orderData.subtotal, orderData.tax, orderData.total, shippingAddress, orderData.paymentMethod], 
+      function(err) {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        const orderId = this.lastID;
+        
+        // Insert order items
+        const stmt = db.prepare(`
+          INSERT INTO order_items (order_id, product_id, product_name, quantity, price) 
+          VALUES (?, ?, ?, ?, ?)
+        `);
+        
+        orderData.items.forEach(item => {
+          stmt.run(orderId, item.product_id, item.name, item.quantity, item.price);
+        });
+        
+        stmt.finalize((err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({ orderId, orderNumber });
+          }
+        });
+      });
+    });
+  },
+  
+  getOrdersByUserId(userId) {
+    return new Promise((resolve, reject) => {
+      db.all(`
+        SELECT o.*, 
+               GROUP_CONCAT(oi.product_name || ' (x' || oi.quantity || ')') as items_summary
+        FROM orders o
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        WHERE o.user_id = ?
+        GROUP BY o.id
+        ORDER BY o.created_at DESC
+      `, [userId], (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+      });
+    });
+  },
+  
+  getOrderById(orderId) {
+    return new Promise((resolve, reject) => {
+      db.get('SELECT * FROM orders WHERE id = ?', [orderId], (err, order) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        if (!order) {
+          resolve(null);
+          return;
+        }
+        
+        // Get order items
+        db.all('SELECT * FROM order_items WHERE order_id = ?', [orderId], (err, items) => {
+          if (err) {
+            reject(err);
+          } else {
+            order.items = items;
+            order.shipping_address = JSON.parse(order.shipping_address);
+            resolve(order);
+          }
+        });
+      });
+    });
+  },
+  
+  updateOrderStatus(orderId, status) {
+    return new Promise((resolve, reject) => {
+      db.run('UPDATE orders SET status = ? WHERE id = ?', [status, orderId], function(err) {
+        if (err) reject(err);
+        else resolve({ changes: this.changes });
+      });
+    });
+  }
+};
+
 module.exports = {
   initializeDatabase,
   products: productMethods,
   cart: cartMethods,
   users: userMethods,
+  orders: orderMethods,
   db // Expose db connection for advanced usage
 }; 

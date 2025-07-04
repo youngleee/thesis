@@ -3,6 +3,7 @@
     <header>
       <h1>Webshop Shell Application</h1>
       <p>Micro-Frontend Architecture Demo</p>
+      <p style="font-size: 0.8rem; opacity: 0.7;">Current View: {{ currentView }} | Desktop: {{ isDesktopView }}</p>
       
       <div class="search-container">
         <div class="search-bar">
@@ -20,28 +21,58 @@
       
       <nav class="navigation">
         <button 
-          @click="navigateTo('products')"
+          @click="() => { console.log('Products button clicked'); navigateTo('products'); }"
           :class="{ active: currentView === 'products' }"
           class="nav-button"
         >
           Products
         </button>
         <button 
-          @click="navigateTo('cart')"
+          @click="() => { console.log('Cart button clicked'); navigateTo('cart'); }"
           :class="{ active: currentView === 'cart' }"
           class="nav-button"
         >
           Shopping Cart
           <span v-if="cartItemCount > 0" class="cart-badge">{{ cartItemCount }}</span>
         </button>
+        <button 
+          v-if="currentUser && cartItemCount > 0"
+          @click="() => { console.log('Checkout button clicked'); navigateTo('checkout'); }"
+          :class="{ active: currentView === 'checkout' }"
+          class="nav-button checkout-button"
+        >
+          Checkout
+        </button>
+        <button 
+          v-if="currentUser"
+          @click="() => { console.log('Profile button clicked'); navigateTo('profile'); }"
+          :class="{ active: currentView === 'profile' }"
+          class="nav-button"
+        >
+          Profile
+        </button>
+        <button 
+          v-if="!currentUser"
+          @click="() => { console.log('Login button clicked'); showAuthModal = true; }"
+          class="nav-button auth-button"
+        >
+          Login
+        </button>
+        <button 
+          v-if="currentUser"
+          @click="() => { console.log('Logout button clicked'); handleLogout(); }"
+          class="nav-button logout-button"
+        >
+          Logout
+        </button>
       </nav>
     </header>
     
     <main>
-      <!-- For desktop view, show both components side by side -->
+      <!-- For desktop view, show components based on current view -->
       <div class="layout-grid" v-if="isDesktopView">
-        <!-- Product Listing MFE -->
-        <div class="product-listing-container">
+        <!-- Product Listing MFE - always visible in desktop mode -->
+        <div class="product-listing-container" v-if="currentView === 'products' || currentView === 'product-details'">
           <Suspense>
             <template #default>
               <RemoteProductList v-if="isProductListingLoaded" :searchTerm="searchQuery" />
@@ -59,8 +90,8 @@
           </Suspense>
         </div>
         
-        <!-- Shopping Cart MFE -->
-        <div class="shopping-cart-container">
+        <!-- Shopping Cart MFE - visible when cart is selected -->
+        <div class="shopping-cart-container" v-if="currentView === 'cart'">
           <Suspense>
             <template #default>
               <RemoteShoppingCart v-if="isShoppingCartLoaded" />
@@ -73,6 +104,49 @@
               <div class="loading-container">
                 <div class="loading-spinner"></div>
                 <p>Loading shopping cart component...</p>
+              </div>
+            </template>
+          </Suspense>
+        </div>
+        
+        <!-- Product Details MFE - visible when product details is selected -->
+        <div class="product-details-container" v-if="currentView === 'product-details'">
+          <Suspense>
+            <template #default>
+              <RemoteProductDetails v-if="isProductDetailsLoaded" :productId="selectedProductId" />
+              <div v-else class="loading-container">
+                <div class="loading-spinner"></div>
+                <p>Loading Product Details...</p>
+              </div>
+            </template>
+            <template #fallback>
+              <div class="loading-container">
+                <div class="loading-spinner"></div>
+                <p>Loading product details component...</p>
+              </div>
+            </template>
+          </Suspense>
+        </div>
+        
+        <!-- User Profile - visible when profile is selected -->
+        <div class="profile-container" v-if="currentView === 'profile'">
+          <UserProfile @logout="handleLogout" />
+        </div>
+        
+        <!-- Checkout MFE - visible when checkout is selected -->
+        <div class="checkout-container" v-if="currentView === 'checkout'">
+          <Suspense>
+            <template #default>
+              <RemoteCheckout v-if="isCheckoutLoaded" />
+              <div v-else class="loading-container">
+                <div class="loading-spinner"></div>
+                <p>Loading Checkout...</p>
+              </div>
+            </template>
+            <template #fallback>
+              <div class="loading-container">
+                <div class="loading-spinner"></div>
+                <p>Loading checkout component...</p>
               </div>
             </template>
           </Suspense>
@@ -137,8 +211,49 @@
             </template>
           </Suspense>
         </div>
+        
+        <!-- User Profile -->
+        <div v-if="currentView === 'profile'" class="profile-container">
+          <UserProfile @logout="handleLogout" />
+        </div>
+        
+        <!-- Checkout MFE -->
+        <div v-if="currentView === 'checkout'" class="checkout-container">
+          <Suspense>
+            <template #default>
+              <RemoteCheckout v-if="isCheckoutLoaded" />
+              <div v-else class="loading-container">
+                <div class="loading-spinner"></div>
+                <p>Loading Checkout...</p>
+              </div>
+            </template>
+            <template #fallback>
+              <div class="loading-container">
+                <div class="loading-spinner"></div>
+                <p>Loading checkout component...</p>
+              </div>
+            </template>
+          </Suspense>
+        </div>
       </div>
     </main>
+    
+    <!-- Authentication Modal -->
+    <div v-if="showAuthModal" class="modal-overlay" @click="showAuthModal = false">
+      <div class="auth-modal" @click.stop>
+        <button @click="showAuthModal = false" class="close-btn">&times;</button>
+        <AuthLogin 
+          v-if="authMode === 'login'"
+          @login-success="handleLoginSuccess"
+          @switch-to-register="authMode = 'register'"
+        />
+        <AuthRegister 
+          v-if="authMode === 'register'"
+          @register-success="handleRegisterSuccess"
+          @switch-to-login="authMode = 'login'"
+        />
+      </div>
+    </div>
     
     <footer>
       <p>&copy; 2025 Webshop Micro-Frontend Demo</p>
@@ -147,7 +262,10 @@
 </template>
 
 <script>
-import { defineAsyncComponent, ref, onMounted, onBeforeUnmount } from 'vue'
+import { defineAsyncComponent, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import AuthLogin from './components/AuthLogin.vue'
+import AuthRegister from './components/AuthRegister.vue'
+import UserProfile from './components/UserProfile.vue'
 
 export default {
   name: 'App',
@@ -155,6 +273,7 @@ export default {
     const isProductListingLoaded = ref(false)
     const isShoppingCartLoaded = ref(false)
     const isProductDetailsLoaded = ref(false)
+    const isCheckoutLoaded = ref(false)
     const currentView = ref('products')
     const isDesktopView = ref(window.innerWidth >= 800)
     const cartItemCount = ref(0)
@@ -162,6 +281,9 @@ export default {
     const selectedProductId = ref(null)
     const wsRef = ref(null)
     const wsConnected = ref(false)
+    const currentUser = ref(null)
+    const showAuthModal = ref(false)
+    const authMode = ref('login')
     
     // Create variables to store event listener callbacks
     let navigateEventHandler;
@@ -175,7 +297,14 @@ export default {
     // Enhanced navigation function
     const navigateTo = (view, params) => {
       console.log(`Navigation clicked: ${view}`, params)
+      console.log('Current view before change:', currentView.value)
       currentView.value = view
+      console.log('Current view after change:', currentView.value)
+      
+      // Force a reactive update
+      nextTick(() => {
+        console.log('View updated in nextTick:', currentView.value)
+      })
       
       if (view === 'product-details' && params && params.productId) {
         selectedProductId.value = params.productId
@@ -222,15 +351,18 @@ export default {
       if (event.detail && event.detail.path) {
         console.log(`Processing navigation to path: ${event.detail.path}`);
         
-        if (event.detail.path === '/products') {
+        if (event.detail.path === '/products' || event.detail.path === 'products') {
           console.log('Navigating to products view');
           navigateTo('products');
-        } else if (event.detail.path === '/cart') {
+        } else if (event.detail.path === '/cart' || event.detail.path === 'cart') {
           console.log('Navigating to cart view');
           navigateTo('cart');
         } else if (event.detail.path === '/product-details' && event.detail.productId) {
           console.log(`Navigating to product details for ID: ${event.detail.productId}`);
           navigateTo('product-details', { productId: event.detail.productId });
+        } else if (event.detail.path === '/checkout' || event.detail.path === 'checkout') {
+          console.log('Navigating to checkout view');
+          navigateTo('checkout');
         } else {
           console.log(`Unknown path: ${event.detail.path}`);
         }
@@ -268,7 +400,8 @@ export default {
           
           if (data.type === 'CART_UPDATE') {
             console.log('Shell: WebSocket cart update received', data.data.length)
-            cartItemCount.value = data.data.length || 0
+            // Calculate total quantity instead of just count
+            cartItemCount.value = data.data.reduce((total, item) => total + (item.quantity || 0), 0)
           }
         } catch (err) {
           console.error('Shell: Error processing WebSocket message:', err)
@@ -297,7 +430,8 @@ export default {
       try {
         const response = await fetch('http://localhost:3000/api/cart')
         const data = await response.json()
-        cartItemCount.value = data.length || 0
+        // Calculate total quantity instead of just count
+        cartItemCount.value = data.reduce((total, item) => total + (item.quantity || 0), 0)
         console.log(`Cart items: ${cartItemCount.value}`)
       } catch (err) {
         console.error('Error fetching cart data:', err)
@@ -355,6 +489,9 @@ export default {
       } else if (viewParam === 'products') {
         console.log('Setting view to products');
         currentView.value = 'products';
+      } else if (viewParam === 'profile') {
+        console.log('Setting view to profile');
+        currentView.value = 'profile';
       }
       
       // Check if we have a stored navigation target in sessionStorage
@@ -384,12 +521,63 @@ export default {
       }
     }
     
+    // Authentication functions
+    const checkAuthStatus = async () => {
+      try {
+        const response = await fetch('http://localhost:3000/api/auth/me', {
+          credentials: 'include'
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          currentUser.value = data.user
+        } else {
+          currentUser.value = null
+        }
+      } catch (err) {
+        console.error('Error checking auth status:', err)
+        currentUser.value = null
+      }
+    }
+    
+    const handleLoginSuccess = (user) => {
+      currentUser.value = user
+      showAuthModal.value = false
+      authMode.value = 'login'
+    }
+    
+    const handleRegisterSuccess = (user) => {
+      currentUser.value = user
+      showAuthModal.value = false
+      authMode.value = 'login'
+    }
+    
+    const handleLogout = async () => {
+      try {
+        await fetch('http://localhost:3000/api/auth/logout', {
+          method: 'POST',
+          credentials: 'include'
+        })
+      } catch (err) {
+        console.error('Error logging out:', err)
+      } finally {
+        currentUser.value = null
+        // Redirect to products view after logout
+        currentView.value = 'products'
+      }
+    }
+    
     onMounted(() => {
       console.log('Shell application mounted')
       // Set these to true once the remotes are loaded
       isProductListingLoaded.value = true
       isShoppingCartLoaded.value = true
       isProductDetailsLoaded.value = true
+      isCheckoutLoaded.value = true
+      isCheckoutLoaded.value = true
+      
+      // Check authentication status on mount
+      checkAuthStatus()
       
       // Expose the navigation function globally for direct access from micro-frontends
       console.log('Exposing shell navigation function globally')
@@ -421,6 +609,14 @@ export default {
       console.log('Adding navigate event listener')
       window.addEventListener('navigate', navigateEventHandler)
       
+      // Test the event listener is working
+      setTimeout(() => {
+        console.log('Testing navigation event listener...')
+        window.dispatchEvent(new CustomEvent('navigate', { 
+          detail: { path: 'test' }
+        }))
+      }, 1000)
+      
       window.addEventListener('cart-updated', handleCartUpdate)
       window.addEventListener('popstate', initFromUrl)
       
@@ -438,6 +634,11 @@ export default {
       
       // Set up WebSocket connection
       setupWebSocket()
+      
+      // Watch for changes in currentView for debugging
+      watch(currentView, (newView, oldView) => {
+        console.log(`View changed from ${oldView} to ${newView}`)
+      })
       
       // Clean up on component unmount
       onBeforeUnmount(() => {
@@ -470,10 +671,19 @@ export default {
       searchQuery,
       performSearch,
       selectedProductId,
-      wsConnected
+      wsConnected,
+      currentUser,
+      showAuthModal,
+      authMode,
+      handleLoginSuccess,
+      handleRegisterSuccess,
+      handleLogout
     }
   },
   components: {
+    AuthLogin,
+    AuthRegister,
+    UserProfile,
     RemoteProductList: defineAsyncComponent(() => 
       import('productListing/ProductList')
         .catch(err => {
@@ -513,6 +723,26 @@ export default {
                 <h2>Product Details</h2>
                 <div class="error-message">
                   <p>Sorry, we couldn't load the product details component.</p>
+                  <p>Please try refreshing the page.</p>
+                </div>
+              </div>
+            `,
+            setup() {
+              return {}
+            }
+          }
+        })
+    ),
+    RemoteCheckout: defineAsyncComponent(() => 
+      import('checkout/Checkout')
+        .catch(err => {
+          console.error('Error loading checkout component:', err)
+          return {
+            template: `
+              <div class="fallback-checkout">
+                <h2>Checkout</h2>
+                <div class="error-message">
+                  <p>Sorry, we couldn't load the checkout component.</p>
                   <p>Please try refreshing the page.</p>
                 </div>
               </div>
@@ -658,6 +888,22 @@ header p {
   border-color: rgba(255, 255, 255, 0.5);
 }
 
+.auth-button {
+  background-color: #10b981 !important;
+}
+
+.auth-button:hover {
+  background-color: #059669 !important;
+}
+
+.logout-button {
+  background-color: #ef4444 !important;
+}
+
+.logout-button:hover {
+  background-color: #dc2626 !important;
+}
+
 .cart-badge {
   position: absolute;
   top: -8px;
@@ -797,6 +1043,53 @@ footer {
   background-color: #f9f9f9;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Authentication Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.auth-modal {
+  background: white;
+  border-radius: 8px;
+  position: relative;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.close-btn {
+  position: absolute;
+  top: 10px;
+  right: 15px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #666;
+  z-index: 1;
+}
+
+.close-btn:hover {
+  color: #333;
+}
+
+.profile-container {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
 }
 
 </style>

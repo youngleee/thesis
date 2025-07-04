@@ -304,7 +304,7 @@ export default {
         return; // Exit early if this works
       }
       
-      // Method 2: Dispatch a custom event
+      // Method 2: Dispatch a custom event with multiple path formats
       console.log('Dispatching navigate event');
       const navigateEvent = new CustomEvent('navigate', { 
         detail: { 
@@ -315,6 +315,16 @@ export default {
       });
       window.dispatchEvent(navigateEvent);
       
+      // Also try without leading slash
+      const navigateEvent2 = new CustomEvent('navigate', { 
+        detail: { 
+          path: 'cart'
+        },
+        bubbles: true,
+        cancelable: true
+      });
+      window.dispatchEvent(navigateEvent2);
+      
       // Method 3: Try to access shell app directly
       try {
         if (window.__shell_app && typeof window.__shell_app.setView === 'function') {
@@ -323,6 +333,12 @@ export default {
         }
       } catch (err) {
         console.error('Error using direct shell app access:', err);
+      }
+      
+      // Method 4: Fallback - try to navigate directly if we're in standalone mode
+      if (!window.__POWERED_BY_FEDERATION__) {
+        console.log('Standalone mode detected, redirecting to cart');
+        window.location.href = 'http://localhost:8083';
       }
     }
     
