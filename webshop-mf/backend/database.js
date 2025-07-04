@@ -29,13 +29,26 @@ const initializeDatabase = () => {
         )
       `);
       
-      // Cart items table
+      // Users table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          username TEXT UNIQUE NOT NULL,
+          email TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      
+      // Cart items table (updated to associate with users)
       db.run(`
         CREATE TABLE IF NOT EXISTS cart_items (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER,
           product_id INTEGER NOT NULL,
           quantity INTEGER NOT NULL DEFAULT 1,
           date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users (id),
           FOREIGN KEY (product_id) REFERENCES products (id)
         )
       `);
@@ -137,25 +150,87 @@ const productMethods = {
   }
 };
 
+// Helper methods for users
+const userMethods = {
+  createUser(username, email, passwordHash) {
+    return new Promise((resolve, reject) => {
+      db.run('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)', 
+        [username, email, passwordHash], 
+        function(err) {
+          if (err) reject(err);
+          else resolve({ id: this.lastID, username, email });
+        }
+      );
+    });
+  },
+  
+  getUserByEmail(email) {
+    return new Promise((resolve, reject) => {
+      db.get('SELECT * FROM users WHERE email = ?', [email], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+  },
+  
+  getUserByUsername(username) {
+    return new Promise((resolve, reject) => {
+      db.get('SELECT * FROM users WHERE username = ?', [username], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+  },
+  
+  getUserById(id) {
+    return new Promise((resolve, reject) => {
+      db.get('SELECT id, username, email, created_at FROM users WHERE id = ?', [id], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+  }
+};
+
 // Helper methods for cart
 const cartMethods = {
-  getCart() {
+  getCart(userId = null) {
     return new Promise((resolve, reject) => {
-      db.all(`
+      let query = `
         SELECT ci.id, ci.product_id, ci.quantity, p.name, p.price, p.image 
         FROM cart_items ci
         JOIN products p ON ci.product_id = p.id
-      `, (err, rows) => {
+      `;
+      let params = [];
+      
+      if (userId) {
+        query += ' WHERE ci.user_id = ?';
+        params.push(userId);
+      } else {
+        query += ' WHERE ci.user_id IS NULL';
+      }
+      
+      db.all(query, params, (err, rows) => {
         if (err) reject(err);
         else resolve(rows);
       });
     });
   },
   
-  addToCart(productId, quantity) {
+  addToCart(productId, quantity, userId = null) {
     return new Promise((resolve, reject) => {
-      // First check if item already exists in cart
-      db.get('SELECT id, quantity FROM cart_items WHERE product_id = ?', [productId], (err, row) => {
+      // First check if item already exists in cart for this user
+      let checkQuery = 'SELECT id, quantity FROM cart_items WHERE product_id = ?';
+      let checkParams = [productId];
+      
+      if (userId) {
+        checkQuery += ' AND user_id = ?';
+        checkParams.push(userId);
+      } else {
+        checkQuery += ' AND user_id IS NULL';
+      }
+      
+      db.get(checkQuery, checkParams, (err, row) => {
         if (err) {
           reject(err);
           return;
@@ -170,10 +245,13 @@ const cartMethods = {
           });
         } else {
           // Insert new item
-          db.run('INSERT INTO cart_items (product_id, quantity) VALUES (?, ?)', [productId, quantity], function(err) {
-            if (err) reject(err);
-            else resolve({ id: this.lastID, quantity });
-          });
+          db.run('INSERT INTO cart_items (product_id, quantity, user_id) VALUES (?, ?, ?)', 
+            [productId, quantity, userId], 
+            function(err) {
+              if (err) reject(err);
+              else resolve({ id: this.lastID, quantity });
+            }
+          );
         }
       });
     });
@@ -197,9 +275,19 @@ const cartMethods = {
     });
   },
   
-  clearCart() {
+  clearCart(userId = null) {
     return new Promise((resolve, reject) => {
-      db.run('DELETE FROM cart_items', function(err) {
+      let query = 'DELETE FROM cart_items';
+      let params = [];
+      
+      if (userId) {
+        query += ' WHERE user_id = ?';
+        params.push(userId);
+      } else {
+        query += ' WHERE user_id IS NULL';
+      }
+      
+      db.run(query, params, function(err) {
         if (err) reject(err);
         else resolve({ changes: this.changes });
       });
@@ -211,5 +299,6 @@ module.exports = {
   initializeDatabase,
   products: productMethods,
   cart: cartMethods,
+  users: userMethods,
   db // Expose db connection for advanced usage
 }; 

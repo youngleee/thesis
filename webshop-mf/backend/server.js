@@ -1,9 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const session = require('express-session');
+const bcrypt = require('bcrypt');
 const { WebSocketServer } = require('ws');
 const http = require('http');
-const { initializeDatabase, products, cart } = require('./database');
+const { initializeDatabase, products, cart, users } = require('./database');
 
 const app = express();
 const port = 3000;
@@ -15,8 +17,23 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:8082', 'http://localhost:8083', 'http://localhost:8084', 'http://localhost:8085'],
+  credentials: true
+}));
 app.use(bodyParser.json());
+
+// Session configuration
+app.use(session({
+  secret: 'webshop-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false, // Set to true in production with HTTPS
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
 
 // Initialize database
 initializeDatabase()
@@ -27,6 +44,28 @@ initializeDatabase()
     console.error('Database initialization error:', err);
     process.exit(1);
   });
+
+// Authentication middleware
+const requireAuth = (req, res, next) => {
+  if (req.session && req.session.userId) {
+    return next();
+  } else {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+};
+
+// Helper function to get current user from session
+const getCurrentUser = async (req) => {
+  if (req.session && req.session.userId) {
+    try {
+      return await users.getUserById(req.session.userId);
+    } catch (err) {
+      console.error('Error fetching current user:', err);
+      return null;
+    }
+  }
+  return null;
+};
 
 // Debug route to check if server is working
 app.get('/api/debug', (req, res) => {
@@ -82,14 +121,15 @@ wss.on('connection', (ws) => {
 });
 
 // Helper function to broadcast cart updates to all WebSocket clients
-const broadcastCartUpdate = () => {
-  cart.getCart()
+const broadcastCartUpdate = (userId = null) => {
+  cart.getCart(userId)
     .then(cartData => {
       wss.clients.forEach(client => {
         if (client.readyState === WebSocketServer.OPEN) {
           client.send(JSON.stringify({ 
             type: 'CART_UPDATE', 
-            data: cartData 
+            data: cartData,
+            userId: userId 
           }));
         }
       });
@@ -98,6 +138,109 @@ const broadcastCartUpdate = () => {
       console.error('Error broadcasting cart update:', err);
     });
 };
+
+// API Routes for authentication
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+    
+    // Validation
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: 'Username, email, and password are required' });
+    }
+    
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+    
+    // Check if user already exists
+    const existingUserByEmail = await users.getUserByEmail(email);
+    if (existingUserByEmail) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+    
+    const existingUserByUsername = await users.getUserByUsername(username);
+    if (existingUserByUsername) {
+      return res.status(400).json({ error: 'Username already taken' });
+    }
+    
+    // Hash password
+    const saltRounds = 10;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
+    
+    // Create user
+    const newUser = await users.createUser(username, email, passwordHash);
+    
+    // Create session
+    req.session.userId = newUser.id;
+    req.session.username = newUser.username;
+    
+    res.status(201).json({
+      message: 'User registered successfully',
+      user: { id: newUser.id, username: newUser.username, email: newUser.email }
+    });
+  } catch (err) {
+    console.error('Error registering user:', err);
+    res.status(500).json({ error: 'Failed to register user' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+    
+    // Find user
+    const user = await users.getUserByEmail(email);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    
+    // Verify password
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    
+    // Create session
+    req.session.userId = user.id;
+    req.session.username = user.username;
+    
+    res.json({
+      message: 'Login successful',
+      user: { id: user.id, username: user.username, email: user.email }
+    });
+  } catch (err) {
+    console.error('Error logging in user:', err);
+    res.status(500).json({ error: 'Failed to login' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  req.session.destroy(err => {
+    if (err) {
+      console.error('Error destroying session:', err);
+      return res.status(500).json({ error: 'Failed to logout' });
+    }
+    res.json({ message: 'Logout successful' });
+  });
+});
+
+app.get('/api/auth/me', async (req, res) => {
+  try {
+    const user = await getCurrentUser(req);
+    if (!user) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    res.json({ user });
+  } catch (err) {
+    console.error('Error fetching current user:', err);
+    res.status(500).json({ error: 'Failed to fetch user data' });
+  }
+});
 
 // API Routes for products
 app.get('/api/products', async (req, res) => {
@@ -126,7 +269,8 @@ app.get('/api/products/:id', async (req, res) => {
 // API Routes for cart
 app.get('/api/cart', async (req, res) => {
   try {
-    const cartItems = await cart.getCart();
+    const userId = req.session?.userId || null;
+    const cartItems = await cart.getCart(userId);
     res.json(cartItems);
   } catch (err) {
     console.error('Error fetching cart:', err);
@@ -137,16 +281,17 @@ app.get('/api/cart', async (req, res) => {
 app.post('/api/cart', async (req, res) => {
   try {
     const { productId, quantity = 1 } = req.body;
+    const userId = req.session?.userId || null;
     
     if (!productId) {
       return res.status(400).json({ error: 'Product ID is required' });
     }
     
-    await cart.addToCart(productId, quantity);
-    const updatedCart = await cart.getCart();
+    await cart.addToCart(productId, quantity, userId);
+    const updatedCart = await cart.getCart(userId);
     
     // Broadcast cart update to all WebSocket clients
-    broadcastCartUpdate();
+    broadcastCartUpdate(userId);
     
     res.status(201).json(updatedCart);
   } catch (err) {
@@ -158,16 +303,17 @@ app.post('/api/cart', async (req, res) => {
 app.put('/api/cart/:id', async (req, res) => {
   try {
     const { quantity } = req.body;
+    const userId = req.session?.userId || null;
     
     if (quantity === undefined) {
       return res.status(400).json({ error: 'Quantity is required' });
     }
     
     await cart.updateCartItem(req.params.id, quantity);
-    const updatedCart = await cart.getCart();
+    const updatedCart = await cart.getCart(userId);
     
     // Broadcast cart update
-    broadcastCartUpdate();
+    broadcastCartUpdate(userId);
     
     res.json(updatedCart);
   } catch (err) {
@@ -178,11 +324,13 @@ app.put('/api/cart/:id', async (req, res) => {
 
 app.delete('/api/cart/:id', async (req, res) => {
   try {
+    const userId = req.session?.userId || null;
+    
     await cart.removeFromCart(req.params.id);
-    const updatedCart = await cart.getCart();
+    const updatedCart = await cart.getCart(userId);
     
     // Broadcast cart update
-    broadcastCartUpdate();
+    broadcastCartUpdate(userId);
     
     res.json(updatedCart);
   } catch (err) {
@@ -193,10 +341,12 @@ app.delete('/api/cart/:id', async (req, res) => {
 
 app.delete('/api/cart', async (req, res) => {
   try {
-    await cart.clearCart();
+    const userId = req.session?.userId || null;
+    
+    await cart.clearCart(userId);
     
     // Broadcast empty cart
-    broadcastCartUpdate();
+    broadcastCartUpdate(userId);
     
     res.json({ message: 'Cart cleared successfully' });
   } catch (err) {
