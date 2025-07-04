@@ -1,0 +1,171 @@
+version: '3.8'
+
+services:
+  # Backend service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: webshop-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DATABASE_URL=./data/webshop.db
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/logs:/app/logs
+    networks:
+      - webshop-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Shell micro-frontend
+  shell:
+    build:
+      context: ./shell
+      dockerfile: Dockerfile
+    container_name: webshop-shell
+    ports:
+      - "8082:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - webshop-network
+    restart: unless-stopped
+    environment:
+      - BACKEND_URL=http://backend:3000
+
+  # Product listing micro-frontend
+  product-listing:
+    build:
+      context: ./product-listing
+      dockerfile: Dockerfile
+    container_name: webshop-product-listing
+    ports:
+      - "8081:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - webshop-network
+    restart: unless-stopped
+    environment:
+      - BACKEND_URL=http://backend:3000
+
+  # Shopping cart micro-frontend
+  shopping-cart:
+    build:
+      context: ./shopping-cart
+      dockerfile: Dockerfile
+    container_name: webshop-shopping-cart
+    ports:
+      - "8083:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - webshop-network
+    restart: unless-stopped
+    environment:
+      - BACKEND_URL=http://backend:3000
+
+  # Product details micro-frontend
+  product-details:
+    build:
+      context: ./product-details
+      dockerfile: Dockerfile
+    container_name: webshop-product-details
+    ports:
+      - "8084:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - webshop-network
+    restart: unless-stopped
+    environment:
+      - BACKEND_URL=http://backend:3000
+
+  # Checkout micro-frontend
+  checkout:
+    build:
+      context: ./checkout
+      dockerfile: Dockerfile
+    container_name: webshop-checkout
+    ports:
+      - "8085:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - webshop-network
+    restart: unless-stopped
+    environment:
+      - BACKEND_URL=http://backend:3000
+
+  # Nginx reverse proxy for production-like setup
+  nginx:
+    image: nginx:alpine
+    container_name: webshop-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - shell
+      - product-listing
+      - shopping-cart
+      - product-details
+      - checkout
+    networks:
+      - webshop-network
+    restart: unless-stopped
+
+  # Redis for session storage (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: webshop-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - webshop-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # Database backup service
+  backup:
+    image: alpine:latest
+    container_name: webshop-backup
+    volumes:
+      - ./backend/data:/data:ro
+      - ./backups:/backups
+    networks:
+      - webshop-network
+    command: |
+      sh -c "
+        while true; do
+          sleep 86400
+          cp /data/webshop.db /backups/webshop-$$(date +%Y%m%d-%H%M%S).db
+          find /backups -name 'webshop-*.db' -mtime +7 -delete
+        done
+      "
+
+networks:
+  webshop-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+    driver: local 

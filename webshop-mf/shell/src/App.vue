@@ -2,7 +2,7 @@
   <div class="container">
     <header>
       <h1>Webshop Shell Application</h1>
-      <p>Micro-Frontend Architecture Demo</p>
+      <p>Micro-Frontend Architecture Demo with Single-SPA</p>
       <p style="font-size: 0.8rem; opacity: 0.7;">Current View: {{ currentView }} | Desktop: {{ isDesktopView }}</p>
       
       <div class="search-container">
@@ -21,15 +21,15 @@
       
       <nav class="navigation">
         <button 
-          @click="() => { console.log('Products button clicked'); navigateTo('products'); }"
-          :class="{ active: currentView === 'products' }"
+          @click="navigateTo('/products')"
+          :class="{ active: isActive('/products') }"
           class="nav-button"
         >
           Products
         </button>
         <button 
-          @click="() => { console.log('Cart button clicked'); navigateTo('cart'); }"
-          :class="{ active: currentView === 'cart' }"
+          @click="navigateTo('/cart')"
+          :class="{ active: isActive('/cart') }"
           class="nav-button"
         >
           Shopping Cart
@@ -37,30 +37,30 @@
         </button>
         <button 
           v-if="currentUser && cartItemCount > 0"
-          @click="() => { console.log('Checkout button clicked'); navigateTo('checkout'); }"
-          :class="{ active: currentView === 'checkout' }"
+          @click="navigateTo('/checkout')"
+          :class="{ active: isActive('/checkout') }"
           class="nav-button checkout-button"
         >
           Checkout
         </button>
         <button 
           v-if="currentUser"
-          @click="() => { console.log('Profile button clicked'); navigateTo('profile'); }"
-          :class="{ active: currentView === 'profile' }"
+          @click="navigateTo('/profile')"
+          :class="{ active: isActive('/profile') }"
           class="nav-button"
         >
           Profile
         </button>
         <button 
           v-if="!currentUser"
-          @click="() => { console.log('Login button clicked'); showAuthModal = true; }"
+          @click="showAuthModal = true"
           class="nav-button auth-button"
         >
           Login
         </button>
         <button 
           v-if="currentUser"
-          @click="() => { console.log('Logout button clicked'); handleLogout(); }"
+          @click="handleLogout"
           class="nav-button logout-button"
         >
           Logout
@@ -69,172 +69,15 @@
     </header>
     
     <main>
-      <!-- For desktop view, show components based on current view -->
-      <div class="layout-grid" v-if="isDesktopView">
-        <!-- Product Listing MFE - always visible in desktop mode -->
-        <div class="product-listing-container" v-if="currentView === 'products' || currentView === 'product-details'">
-          <Suspense>
-            <template #default>
-              <RemoteProductList v-if="isProductListingLoaded" :searchTerm="searchQuery" />
-              <div v-else class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading Product Listing...</p>
-              </div>
-            </template>
-            <template #fallback>
-              <div class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading product listing component...</p>
-              </div>
-            </template>
-          </Suspense>
-        </div>
-        
-        <!-- Shopping Cart MFE - visible when cart is selected -->
-        <div class="shopping-cart-container" v-if="currentView === 'cart'">
-          <Suspense>
-            <template #default>
-              <RemoteShoppingCart v-if="isShoppingCartLoaded" />
-              <div v-else class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading Shopping Cart...</p>
-              </div>
-            </template>
-            <template #fallback>
-              <div class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading shopping cart component...</p>
-              </div>
-            </template>
-          </Suspense>
-        </div>
-        
-        <!-- Product Details MFE - visible when product details is selected -->
-        <div class="product-details-container" v-if="currentView === 'product-details'">
-          <Suspense>
-            <template #default>
-              <RemoteProductDetails v-if="isProductDetailsLoaded" :productId="selectedProductId" />
-              <div v-else class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading Product Details...</p>
-              </div>
-            </template>
-            <template #fallback>
-              <div class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading product details component...</p>
-              </div>
-            </template>
-          </Suspense>
-        </div>
-        
-        <!-- User Profile - visible when profile is selected -->
-        <div class="profile-container" v-if="currentView === 'profile'">
-          <UserProfile @logout="handleLogout" />
-        </div>
-        
-        <!-- Checkout MFE - visible when checkout is selected -->
-        <div class="checkout-container" v-if="currentView === 'checkout'">
-          <Suspense>
-            <template #default>
-              <RemoteCheckout v-if="isCheckoutLoaded" />
-              <div v-else class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading Checkout...</p>
-              </div>
-            </template>
-            <template #fallback>
-              <div class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading checkout component...</p>
-              </div>
-            </template>
-          </Suspense>
-        </div>
-      </div>
+      <!-- Single-SPA will handle the micro-frontend mounting here -->
+      <div id="single-spa-application:product-listing"></div>
+      <div id="single-spa-application:shopping-cart"></div>
+      <div id="single-spa-application:product-details"></div>
+      <div id="single-spa-application:checkout"></div>
       
-      <!-- For mobile view, show only the active component -->
-      <div v-else>
-        <!-- Product Listing MFE -->
-        <div v-if="currentView === 'products'" class="product-listing-container">
-          <Suspense>
-            <template #default>
-              <RemoteProductList v-if="isProductListingLoaded" :searchTerm="searchQuery" />
-              <div v-else class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading Product Listing...</p>
-              </div>
-            </template>
-            <template #fallback>
-              <div class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading product listing component...</p>
-              </div>
-            </template>
-          </Suspense>
-        </div>
-        
-        <!-- Shopping Cart MFE -->
-        <div v-if="currentView === 'cart'" class="shopping-cart-container">
-          <Suspense>
-            <template #default>
-              <RemoteShoppingCart v-if="isShoppingCartLoaded" />
-              <div v-else class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading Shopping Cart...</p>
-              </div>
-            </template>
-            <template #fallback>
-              <div class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading shopping cart component...</p>
-              </div>
-            </template>
-          </Suspense>
-        </div>
-        
-        <!-- Product Details MFE -->
-        <div v-if="currentView === 'product-details'" class="product-details-container">
-          <Suspense>
-            <template #default>
-              <RemoteProductDetails v-if="isProductDetailsLoaded" :productId="selectedProductId" />
-              <div v-else class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading Product Details...</p>
-              </div>
-            </template>
-            <template #fallback>
-              <div class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading product details component...</p>
-              </div>
-            </template>
-          </Suspense>
-        </div>
-        
-        <!-- User Profile -->
-        <div v-if="currentView === 'profile'" class="profile-container">
-          <UserProfile @logout="handleLogout" />
-        </div>
-        
-        <!-- Checkout MFE -->
-        <div v-if="currentView === 'checkout'" class="checkout-container">
-          <Suspense>
-            <template #default>
-              <RemoteCheckout v-if="isCheckoutLoaded" />
-              <div v-else class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading Checkout...</p>
-              </div>
-            </template>
-            <template #fallback>
-              <div class="loading-container">
-                <div class="loading-spinner"></div>
-                <p>Loading checkout component...</p>
-              </div>
-            </template>
-          </Suspense>
-        </div>
+      <!-- Profile component (local to shell) -->
+      <div v-if="isActive('/profile')" class="profile-container">
+        <UserProfile @logout="handleLogout" />
       </div>
     </main>
     
@@ -256,19 +99,25 @@
     </div>
     
     <footer>
-      <p>&copy; 2025 Webshop Micro-Frontend Demo</p>
+      <p>&copy; 2025 Webshop Micro-Frontend Demo with Single-SPA</p>
     </footer>
   </div>
 </template>
 
 <script>
-import { defineAsyncComponent, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { navigateToUrl } from 'single-spa'
 import AuthLogin from './components/AuthLogin.vue'
 import AuthRegister from './components/AuthRegister.vue'
 import UserProfile from './components/UserProfile.vue'
 
 export default {
   name: 'App',
+  components: {
+    AuthLogin,
+    AuthRegister,
+    UserProfile
+  },
   setup() {
     const isProductListingLoaded = ref(false)
     const isShoppingCartLoaded = ref(false)
@@ -294,50 +143,22 @@ export default {
       isDesktopView.value = window.innerWidth >= 800
     }
     
-    // Enhanced navigation function
-    const navigateTo = (view, params) => {
-      console.log(`Navigation clicked: ${view}`, params)
-      console.log('Current view before change:', currentView.value)
-      currentView.value = view
-      console.log('Current view after change:', currentView.value)
-      
-      // Force a reactive update
-      nextTick(() => {
-        console.log('View updated in nextTick:', currentView.value)
-      })
-      
-      if (view === 'product-details' && params && params.productId) {
-        selectedProductId.value = params.productId
-        
-        // Update URL to reflect the product being viewed
-        const url = new URL(window.location)
-        url.searchParams.set('view', 'product-details')
-        url.searchParams.set('id', params.productId)
-        window.history.pushState({}, '', url)
-      } else if (view === 'cart') {
-        // Update URL for cart view
-        const url = new URL(window.location)
-        url.searchParams.set('view', 'cart')
-        url.searchParams.delete('id') // Remove product ID if present
-        window.history.pushState({}, '', url)
-      } else if (view === 'products') {
-        // Update URL for products view
-        const url = new URL(window.location)
-        url.searchParams.delete('view')
-        url.searchParams.delete('id')
-        window.history.pushState({}, '', url)
-      }
+    // Check if current route is active
+    const isActive = (path) => {
+      return window.location.pathname === path
+    }
+    
+    // Navigation using Single-SPA
+    const navigateTo = (path) => {
+      navigateToUrl(path)
     }
     
     // Search function
     const performSearch = () => {
       console.log(`Searching for: ${searchQuery.value}`)
-      // Ensure we're on the products view when searching
-      if (currentView.value !== 'products') {
-        currentView.value = 'products'
-      }
-      // The search term is passed to ProductList as a prop
-      // We also broadcast a custom event for more complex scenarios
+      // Navigate to products and trigger search
+      navigateTo('/products')
+      // Dispatch search event for micro-frontends
       window.dispatchEvent(new CustomEvent('search', { 
         detail: { query: searchQuery.value }
       }))
@@ -371,18 +192,8 @@ export default {
       }
     }
     
-    // Handle cart update events from micro-frontends (legacy support)
-    const handleCartUpdate = (event) => {
-      console.log('Cart update event received in shell:', event.detail)
-      // Only use if WebSocket is not connected
-      if (!wsConnected.value) {
-        updateCartCount()
-      }
-    }
-    
     // Set up WebSocket connection
     const setupWebSocket = () => {
-      // Close existing connection if any
       if (wsRef.value && wsRef.value.readyState !== WebSocket.CLOSED) {
         wsRef.value.close()
       }
@@ -397,173 +208,85 @@ export default {
       wsRef.value.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
-          
-          if (data.type === 'CART_UPDATE') {
-            console.log('Shell: WebSocket cart update received', data.data.length)
-            // Calculate total quantity instead of just count
-            cartItemCount.value = data.data.reduce((total, item) => total + (item.quantity || 0), 0)
+          if (data.type === 'cart_update') {
+            cartItemCount.value = data.cartCount || 0
           }
-        } catch (err) {
-          console.error('Shell: Error processing WebSocket message:', err)
+        } catch (error) {
+          console.error('Error parsing WebSocket message:', error)
         }
       }
       
-      wsRef.value.onclose = (event) => {
-        console.log('Shell: WebSocket connection closed', event.code, event.reason)
+      wsRef.value.onclose = () => {
+        console.log('Shell: WebSocket connection closed')
         wsConnected.value = false
-        
-        // Fall back to polling if WebSocket fails
-        if (!event.wasClean) {
-          console.log('Shell: Falling back to polling for cart updates')
-          startCartPolling()
-        }
+        // Reconnect after 3 seconds
+        setTimeout(setupWebSocket, 3000)
       }
       
-      wsRef.value.onerror = (err) => {
-        console.error('Shell: WebSocket error:', err)
-        wsConnected.value = false
+      wsRef.value.onerror = (error) => {
+        console.error('Shell: WebSocket error:', error)
       }
     }
     
-    // Update cart count from REST API (fallback)
+    // Update cart count
     const updateCartCount = async () => {
       try {
-        const response = await fetch('http://localhost:3000/api/cart')
-        const data = await response.json()
-        // Calculate total quantity instead of just count
-        cartItemCount.value = data.reduce((total, item) => total + (item.quantity || 0), 0)
-        console.log(`Cart items: ${cartItemCount.value}`)
-      } catch (err) {
-        console.error('Error fetching cart data:', err)
-        cartItemCount.value = 0
-      }
-    }
-    
-    // Polling interval reference
-    let cartInterval = null
-    
-    // Start cart polling (fallback mechanism)
-    const startCartPolling = () => {
-      // Clear existing interval if any
-      if (cartInterval) {
-        clearInterval(cartInterval)
-      }
-      
-      // Initial fetch
-      updateCartCount()
-      
-      // Set up polling
-      cartInterval = setInterval(updateCartCount, 5000)
-    }
-    
-    // Stop cart polling
-    const stopCartPolling = () => {
-      if (cartInterval) {
-        clearInterval(cartInterval)
-        cartInterval = null
-      }
-    }
-    
-    // Check URL for initial view and product ID
-    const initFromUrl = () => {
-      console.log('Initializing from URL parameters');
-      const urlParams = new URLSearchParams(window.location.search);
-      const viewParam = urlParams.get('view');
-      const productIdParam = urlParams.get('id');
-      
-      console.log('URL parameters:', { view: viewParam, id: productIdParam });
-      
-      if (viewParam === 'product-details' && productIdParam) {
-        console.log(`Setting view to product-details with ID: ${productIdParam}`);
-        selectedProductId.value = productIdParam;
-        currentView.value = 'product-details';
-        
-        // Add debug output to verify the state changes
-        console.log('After setting state:', { 
-          currentView: currentView.value, 
-          selectedProductId: selectedProductId.value 
-        });
-      } else if (viewParam === 'cart') {
-        console.log('Setting view to cart');
-        currentView.value = 'cart';
-      } else if (viewParam === 'products') {
-        console.log('Setting view to products');
-        currentView.value = 'products';
-      } else if (viewParam === 'profile') {
-        console.log('Setting view to profile');
-        currentView.value = 'profile';
-      }
-      
-      // Check if we have a stored navigation target in sessionStorage
-      try {
-        const navTarget = sessionStorage.getItem('navTarget');
-        if (navTarget) {
-          console.log(`Found navigation target in sessionStorage: ${navTarget}`);
-          
-          if (navTarget === 'cart') {
-            console.log('Setting view to cart from sessionStorage');
-            currentView.value = 'cart';
-          } else if (navTarget.startsWith('product-details:')) {
-            // Handle product detail navigation from session storage
-            const productId = navTarget.split(':')[1];
-            if (productId) {
-              console.log(`Setting view to product-details with ID: ${productId} from sessionStorage`);
-              selectedProductId.value = productId;
-              currentView.value = 'product-details';
-            }
-          }
-          
-          // Clear the stored target after using it
-          sessionStorage.removeItem('navTarget');
-        }
-      } catch (err) {
-        console.error('Error reading from sessionStorage:', err);
-      }
-    }
-    
-    // Authentication functions
-    const checkAuthStatus = async () => {
-      try {
-        const response = await fetch('http://localhost:3000/api/auth/me', {
+        const response = await fetch('http://localhost:3000/api/cart/count', {
           credentials: 'include'
         })
-        
         if (response.ok) {
           const data = await response.json()
-          currentUser.value = data.user
-        } else {
-          currentUser.value = null
+          cartItemCount.value = data.count || 0
         }
-      } catch (err) {
-        console.error('Error checking auth status:', err)
-        currentUser.value = null
+      } catch (error) {
+        console.error('Error fetching cart count:', error)
       }
     }
     
+    // Handle login success
     const handleLoginSuccess = (user) => {
       currentUser.value = user
       showAuthModal.value = false
-      authMode.value = 'login'
+      updateCartCount()
     }
     
+    // Handle register success
     const handleRegisterSuccess = (user) => {
       currentUser.value = user
       showAuthModal.value = false
-      authMode.value = 'login'
+      updateCartCount()
     }
     
+    // Handle logout
     const handleLogout = async () => {
       try {
-        await fetch('http://localhost:3000/api/auth/logout', {
+        const response = await fetch('http://localhost:3000/api/auth/logout', {
           method: 'POST',
           credentials: 'include'
         })
-      } catch (err) {
-        console.error('Error logging out:', err)
-      } finally {
-        currentUser.value = null
-        // Redirect to products view after logout
-        currentView.value = 'products'
+        if (response.ok) {
+          currentUser.value = null
+          cartItemCount.value = 0
+          navigateTo('/products')
+        }
+      } catch (error) {
+        console.error('Error during logout:', error)
+      }
+    }
+    
+    // Check current user on mount
+    const checkCurrentUser = async () => {
+      try {
+        const response = await fetch('http://localhost:3000/api/auth/current-user', {
+          credentials: 'include'
+        })
+        if (response.ok) {
+          const user = await response.json()
+          currentUser.value = user
+          updateCartCount()
+        }
+      } catch (error) {
+        console.error('Error checking current user:', error)
       }
     }
     
@@ -574,10 +297,9 @@ export default {
       isShoppingCartLoaded.value = true
       isProductDetailsLoaded.value = true
       isCheckoutLoaded.value = true
-      isCheckoutLoaded.value = true
       
       // Check authentication status on mount
-      checkAuthStatus()
+      checkCurrentUser()
       
       // Expose the navigation function globally for direct access from micro-frontends
       console.log('Exposing shell navigation function globally')
@@ -617,21 +339,6 @@ export default {
         }))
       }, 1000)
       
-      window.addEventListener('cart-updated', handleCartUpdate)
-      window.addEventListener('popstate', initFromUrl)
-      
-      // Store the clear search handler in a variable for later removal
-      clearSearchHandler = () => {
-        searchQuery.value = ''
-      };
-      window.addEventListener('clear-search', clearSearchHandler)
-      
-      // Test if event listener is working by dispatching a test event
-      console.log('Testing event listener with dummy event...')
-      window.dispatchEvent(new CustomEvent('navigate-test', { 
-        detail: { test: 'This is a test event' }
-      }))
-      
       // Set up WebSocket connection
       setupWebSocket()
       
@@ -642,21 +349,17 @@ export default {
       
       // Clean up on component unmount
       onBeforeUnmount(() => {
-        stopCartPolling()
-        
-        // Close WebSocket connection
         if (wsRef.value) {
           wsRef.value.close()
-          wsRef.value = null
         }
         
         // Remove event listeners with direct references to the same handler functions
         console.log('Removing event listeners')
         window.removeEventListener('resize', handleResize)
         window.removeEventListener('navigate', navigateEventHandler)
-        window.removeEventListener('cart-updated', handleCartUpdate)
-        window.removeEventListener('popstate', initFromUrl)
-        window.removeEventListener('clear-search', clearSearchHandler)
+        
+        // Remove cart update event listener
+        window.removeEventListener('cart-update', updateCartCount)
       })
     })
     
@@ -667,7 +370,6 @@ export default {
       currentView,
       isDesktopView,
       cartItemCount,
-      navigateTo,
       searchQuery,
       performSearch,
       selectedProductId,
@@ -675,84 +377,12 @@ export default {
       currentUser,
       showAuthModal,
       authMode,
+      isActive,
+      navigateTo,
       handleLoginSuccess,
       handleRegisterSuccess,
       handleLogout
     }
-  },
-  components: {
-    AuthLogin,
-    AuthRegister,
-    UserProfile,
-    RemoteProductList: defineAsyncComponent(() => 
-      import('productListing/ProductList')
-        .catch(err => {
-          console.error('Error loading product listing component:', err)
-          return import('./components/FallbackProductList.vue')
-        })
-    ),
-    RemoteShoppingCart: defineAsyncComponent(() => 
-      import('shoppingCart/ShoppingCart')
-        .catch(err => {
-          console.error('Error loading shopping cart component:', err)
-          // We could create a FallbackShoppingCart.vue component
-          // For now, just return a simple component
-          return {
-            template: `
-              <div class="fallback-cart">
-                <h2>Shopping Cart</h2>
-                <div class="error-message">
-                  <p>Sorry, we couldn't load the shopping cart component.</p>
-                  <p>Please try refreshing the page.</p>
-                </div>
-              </div>
-            `,
-            setup() {
-              return {}
-            }
-          }
-        })
-    ),
-    RemoteProductDetails: defineAsyncComponent(() => 
-      import('productDetails/ProductDetails')
-        .catch(err => {
-          console.error('Error loading product details component:', err)
-          return {
-            template: `
-              <div class="fallback-product-details">
-                <h2>Product Details</h2>
-                <div class="error-message">
-                  <p>Sorry, we couldn't load the product details component.</p>
-                  <p>Please try refreshing the page.</p>
-                </div>
-              </div>
-            `,
-            setup() {
-              return {}
-            }
-          }
-        })
-    ),
-    RemoteCheckout: defineAsyncComponent(() => 
-      import('checkout/Checkout')
-        .catch(err => {
-          console.error('Error loading checkout component:', err)
-          return {
-            template: `
-              <div class="fallback-checkout">
-                <h2>Checkout</h2>
-                <div class="error-message">
-                  <p>Sorry, we couldn't load the checkout component.</p>
-                  <p>Please try refreshing the page.</p>
-                </div>
-              </div>
-            `,
-            setup() {
-              return {}
-            }
-          }
-        })
-    )
   }
 }
 </script>

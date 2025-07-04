@@ -1,17 +1,29 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 
-// Bootstrap for standalone or dev mode
-// In production as a micro-frontend, this won't be executed since the shell will import the exposed component directly
+// Create a function to mount the app
 const mount = () => {
   createApp(App).mount('#app')
 }
 
-// Execute the mounting function immediately in dev mode or if running standalone
-// This allows us to run the micro-frontend by itself for development
+// Single-SPA lifecycle functions
+export async function bootstrap() {
+  console.log('Product Details: bootstrap')
+}
+
+export async function mount(props) {
+  console.log('Product Details: mount', props)
+  createApp(App).mount('#single-spa-application\\:product-details')
+}
+
+export async function unmount() {
+  console.log('Product Details: unmount')
+  // Clean up if needed
+}
+
+// If we're not running in the context of a container, mount immediately
 if (!window.__POWERED_BY_FEDERATION__) {
   mount()
 }
 
-// For Module Federation - this allows the micro-frontend to be used by the shell
 export { mount }
