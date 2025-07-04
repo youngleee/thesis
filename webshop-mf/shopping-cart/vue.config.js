@@ -13,7 +13,7 @@ module.exports = defineConfig({
         name: 'shoppingCart',
         filename: 'remoteEntry.js',
         exposes: {
-          './ShoppingCart': './src/components/ShoppingCart.vue',
+          './ShoppingCart': './src/main.js',
         },
         shared: {
           vue: {

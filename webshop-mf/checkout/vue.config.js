@@ -13,15 +13,12 @@ module.exports = defineConfig({
         name: 'checkout',
         filename: 'remoteEntry.js',
         exposes: {
-          './Checkout': './src/components/Checkout.vue',
+          './Checkout': './src/main.js',
         },
         shared: {
           vue: {
             singleton: true,
             eager: true
-          },
-          axios: {
-            singleton: true,
           }
         }
       })

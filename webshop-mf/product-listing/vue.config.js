@@ -13,7 +13,7 @@ module.exports = defineConfig({
         name: 'productListing',
         filename: 'remoteEntry.js',
         exposes: {
-          './ProductList': './src/components/ProductList.vue',
+          './ProductList': './src/main.js',
         },
         shared: {
           vue: {

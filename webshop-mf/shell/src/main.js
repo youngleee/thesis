@@ -21,19 +21,19 @@ registerApplication({
 // Register remote micro-frontends
 registerApplication({
   name: 'product-listing',
-  app: () => import('product-listing/ProductList'),
+  app: () => import('productListing/ProductList'),
   activeWhen: (location) => location.pathname === '/products' || location.pathname === '/'
 })
 
 registerApplication({
   name: 'shopping-cart',
-  app: () => import('shopping-cart/ShoppingCart'),
+  app: () => import('shoppingCart/ShoppingCart'),
   activeWhen: (location) => location.pathname === '/cart'
 })
 
 registerApplication({
   name: 'product-details',
-  app: () => import('product-details/ProductDetails'),
+  app: () => import('productDetails/ProductDetails'),
   activeWhen: (location) => location.pathname.startsWith('/product/')
 })
 

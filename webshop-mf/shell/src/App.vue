@@ -235,7 +235,7 @@ export default {
           credentials: 'include'
         })
         if (response.ok) {
-          const data = await response.json()
+        const data = await response.json()
           cartItemCount.value = data.count || 0
         }
       } catch (error) {
@@ -719,6 +719,19 @@ footer {
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+}
+
+/* Single-SPA mount point styles */
+#single-spa-application\\:product-listing,
+#single-spa-application\\:shopping-cart,
+#single-spa-application\\:product-details,
+#single-spa-application\\:checkout {
+  min-height: 400px;
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
   margin: 20px 0;
 }
 

@@ -13,11 +13,12 @@ module.exports = defineConfig({
         name: 'productDetails',
         filename: 'remoteEntry.js',
         exposes: {
-          './ProductDetails': './src/components/ProductDetails.vue',
+          './ProductDetails': './src/main.js',
         },
         shared: {
           vue: {
             singleton: true,
+            eager: true
           },
           axios: {
             singleton: true,
