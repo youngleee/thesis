@@ -1,4 +1,4 @@
-# CI/CD for Micro-Frontend Webshop
+git# CI/CD for Micro-Frontend Webshop
 
 This document describes the Continuous Integration and Continuous Deployment (CI/CD) setup for the micro-frontend webshop application. The architecture leverages GitHub Actions, Docker, and Docker Compose to automate building, testing, security scanning, and deployment of all microfrontends and backend services.
 
